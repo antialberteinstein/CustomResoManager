@@ -1,0 +1,1 @@
+Chứa logic backend thay đổi độ phân giải màn hình.

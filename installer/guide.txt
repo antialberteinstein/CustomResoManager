@@ -1,0 +1,3 @@
+Chứa file cài đặt của chương trình (*.exe)
+Chương trình sau khi build xong sẽ xuất file cài đặt ra folder này).
+File cài đặt nên là file setup (khi chạy sẽ cài tất cả các modules của chương trình và cài đặt ứng dụng vào Program Files).
