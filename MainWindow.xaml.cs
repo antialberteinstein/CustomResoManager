@@ -1,5 +1,10 @@
 ﻿using System.Linq;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using CustomResoManager.Core;
 using CustomResoManager.Models;
@@ -14,6 +19,8 @@ public partial class MainWindow : Window
     private readonly IResolutionManager _resolutionManager;
     private readonly IProfileManager _profileManager;
     private readonly IAppEngine _appEngine;
+    private readonly HttpClient _chatClient = new HttpClient();
+    private const string ChatEndpoint = "http://127.0.0.1:8000/chat";
 
     public MainWindow()
     {
@@ -131,10 +138,69 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void btnSendChat_Click(object sender, RoutedEventArgs e)
+    {
+        var userText = txtChatInput.Text.Trim();
+        if (string.IsNullOrWhiteSpace(userText))
+        {
+            return;
+        }
+
+        AppendChatLine($"You: {userText}");
+        txtChatInput.Text = string.Empty;
+
+        btnSendChat.IsEnabled = false;
+
+        try
+        {
+            var payload = JsonSerializer.Serialize(new { message = userText });
+            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await _chatClient.PostAsync(ChatEndpoint, content);
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            var reply = JsonDocument.Parse(body).RootElement.GetProperty("reply").GetString() ?? string.Empty;
+            AppendChatLine($"Bot: {reply}");
+        }
+        catch (Exception ex)
+        {
+            AppendChatLine($"Bot: [error] {ex.Message}");
+        }
+        finally
+        {
+            btnSendChat.IsEnabled = true;
+        }
+    }
+
+    private void AppendChatLine(string line)
+    {
+        if (string.IsNullOrEmpty(txtChatLog.Text))
+        {
+            txtChatLog.Text = line;
+        }
+        else
+        {
+            txtChatLog.Text += Environment.NewLine + line;
+        }
+
+        txtChatLog.CaretIndex = txtChatLog.Text.Length;
+        txtChatLog.ScrollToEnd();
+    }
+
+    private void txtChatInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            btnSendChat_Click(sender, e);
+        }
+    }
+
     protected override void OnClosed(System.EventArgs e)
     {
         // Rất Quen Trọng: Khôi phục màn hình khi thoát Test GUI
         _appEngine.Stop();
+        _chatClient.Dispose();
         base.OnClosed(e);
     }
 }

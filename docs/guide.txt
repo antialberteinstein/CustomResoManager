@@ -1,1 +1,0 @@
-Chứa tài liệu sử dụng App, được truy vấn bởi Agent.

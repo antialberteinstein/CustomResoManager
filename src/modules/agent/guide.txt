@@ -1,1 +1,0 @@
-Chứa logic Agent Chatbot sử dụng RAG để truy vấn thông tin cách sử dụng App, export thành Flask API.
