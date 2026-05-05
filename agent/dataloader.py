@@ -3,7 +3,6 @@ from pathlib import Path
 
 import chromadb
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import (
@@ -12,9 +11,8 @@ from config import (
     CHUNK_SIZE,
     COLLECTION_NAME,
     DOCS_DIR,
-    EMBEDDING_MODEL,
 )
-
+from vectorizer import get_vectorizer
 
 def load_documents(docs_dir: Path) -> list:
     documents = []
@@ -43,8 +41,8 @@ def main() -> int:
     )
     chunks = splitter.split_documents(documents)
 
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    vectors = embeddings.embed_documents([chunk.page_content for chunk in chunks])
+    vectorizer = get_vectorizer()
+    vectors = vectorizer.embed_documents([chunk.page_content for chunk in chunks])
 
     if not vectors:
         raise SystemExit("No vectors generated from documents.")

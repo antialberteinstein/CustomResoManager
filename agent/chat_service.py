@@ -4,18 +4,18 @@ from typing import Optional
 import chromadb
 import requests
 from llama_cpp import Llama
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from config import (
     CHROMA_DIR,
     COLLECTION_NAME,
-    EMBEDDING_MODEL,
     GGUF_FILENAME,
     GGUF_URL,
     MODEL_CONTEXT_TOKENS,
     TEMPERATURE,
     TOP_K,
+    MAX_TOKENS,
 )
+from vectorizer import Vectorizer, get_vectorizer
 
 class ChatService:
     def __init__(self) -> None:
@@ -23,7 +23,7 @@ class ChatService:
         self.gguf_filename = GGUF_FILENAME
         self.temperature = TEMPERATURE
         self._model: Optional[Llama] = None
-        self._embeddings: Optional[HuggingFaceEmbeddings] = None
+        self._embeddings: Optional[Vectorizer] = None
         self._collection = None
 
     def load(self) -> None:
@@ -32,7 +32,7 @@ class ChatService:
         print(f"[chat] Loading model from: {model_path}")
         self._model = Llama(model_path=str(model_path), n_ctx=MODEL_CONTEXT_TOKENS)
         print("[chat] Model loaded.")
-        self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        self._embeddings = get_vectorizer()
         client = chromadb.PersistentClient(path=CHROMA_DIR)
         self._collection = client.get_or_create_collection(COLLECTION_NAME)
 
@@ -71,7 +71,7 @@ class ChatService:
 
         result = self._model.create_completion(
             prompt=prompt,
-            max_tokens=128,
+            max_tokens=MAX_TOKENS,
             temperature=self.temperature,
         )
         text = result["choices"][0]["text"]
