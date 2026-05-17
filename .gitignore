@@ -5,3 +5,15 @@ riderModule.iml
 /_ReSharper.Caches/
 **/*.exe
 **/.models
+
+**/.vs
+**/.env
+**/.idea
+**/.vscode
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.log
+**/dist
+**/*.db
+**/chroma_db

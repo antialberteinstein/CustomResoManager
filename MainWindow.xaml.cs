@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +26,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        _chatClient.Timeout = TimeSpan.FromMinutes(5);
 
         // 1. Khởi tạo Backend Services (Thay vì dùng framework DI phức tạp lúc test)
         _resolutionManager = new ResolutionManager();
@@ -147,6 +150,7 @@ public partial class MainWindow : Window
         }
 
         AppendChatLine($"You: {userText}");
+        AppendChatLine("Bot: Dang suy nghi...");
         txtChatInput.Text = string.Empty;
 
         btnSendChat.IsEnabled = false;
@@ -160,11 +164,11 @@ public partial class MainWindow : Window
 
             var body = await response.Content.ReadAsStringAsync();
             var reply = JsonDocument.Parse(body).RootElement.GetProperty("reply").GetString() ?? string.Empty;
-            AppendChatLine($"Bot: {reply}");
+            ReplaceLastChatLine($"Bot: {reply}");
         }
         catch (Exception ex)
         {
-            AppendChatLine($"Bot: [error] {ex.Message}");
+            ReplaceLastChatLine($"Bot: [error] {ex.Message}");
         }
         finally
         {
@@ -181,6 +185,23 @@ public partial class MainWindow : Window
         else
         {
             txtChatLog.Text += Environment.NewLine + line;
+        }
+
+        txtChatLog.CaretIndex = txtChatLog.Text.Length;
+        txtChatLog.ScrollToEnd();
+    }
+
+    private void ReplaceLastChatLine(string line)
+    {
+        var lines = txtChatLog.Text.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+        if (lines.Length == 0)
+        {
+            txtChatLog.Text = line;
+        }
+        else
+        {
+            lines[lines.Length - 1] = line;
+            txtChatLog.Text = string.Join(Environment.NewLine, lines);
         }
 
         txtChatLog.CaretIndex = txtChatLog.Text.Length;

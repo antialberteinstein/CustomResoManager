@@ -61,10 +61,11 @@ class ChatService:
         prompt = (
             "Bạn là trợ lý hướng dẫn sử dụng hệ thống. "
             "Chỉ trả lời dựa trên tài liệu được cung cấp. "
-            "Nếu không có thông tin, hãy nói rõ là không tìm thấy.\n\n"
+            "Hãy trả lời đúng trọng tâm câu hỏi, không tự diễn giải lan man. "
+            "Nếu tài liệu không có thông tin trực tiếp, hãy nói rõ là không tìm thấy.\n\n"
             f"Tài liệu:\n{context}\n\n"
             f"Câu hỏi: {message.strip()}\n"
-            "Trả lời:"
+            "Trả lời ngắn gọn, đúng trọng tâm:"
         )
 
         prompt = self._trim_prompt(prompt)
@@ -75,7 +76,45 @@ class ChatService:
             temperature=self.temperature,
         )
         text = result["choices"][0]["text"]
-        return text.strip()
+        return self._dedupe_lines(self._clean_reply(text))
+
+    def _clean_reply(self, text: str) -> str:
+        cleaned = text.strip()
+        if not cleaned:
+            return cleaned
+
+        if "Trả lời:" in cleaned:
+            cleaned = cleaned.split("Trả lời:")[-1].strip()
+
+        for marker in ("Câu hỏi:", "Tài liệu:"):
+            if marker in cleaned:
+                cleaned = cleaned.split(marker)[0].strip()
+
+        return cleaned
+
+    def _dedupe_lines(self, text: str) -> str:
+        if not text:
+            return text
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return ""
+
+        output_lines = []
+        last = None
+        repeats = 0
+        for line in lines:
+            if line == last:
+                repeats += 1
+                if repeats >= 2:
+                    continue
+            else:
+                repeats = 0
+                last = line
+
+            output_lines.append(line)
+
+        return "\n".join(output_lines)
 
     def _trim_prompt(self, prompt: str) -> str:
         if self._model is None:
