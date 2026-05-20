@@ -1,5 +1,12 @@
+import asyncio
+import json
+import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+
+_DEBUG = bool(os.environ.get("CHAT_DEBUG"))
 
 import chromadb
 import requests
@@ -15,7 +22,88 @@ from config import (
     TOP_K,
     MAX_TOKENS,
 )
+from mcp_client import MCPToolingClient, MCPUnavailableError
 from vectorizer import Vectorizer, get_vectorizer
+
+
+REACT_SYSTEM_PROMPT = """Bạn là trợ lý quản lý độ phân giải màn hình. Bạn giải quyết yêu cầu của người dùng bằng cách suy luận theo pattern ReAct: Thought → Action → Observation, lặp đến khi có đủ thông tin để đưa Final Answer.
+
+TOOL có sẵn:
+- list_resolutions: lấy danh sách độ phân giải hệ thống hỗ trợ. Input: {}.
+- get_current_resolution: lấy độ phân giải đang dùng của màn hình. Input: {}.
+- change_resolution: đổi độ phân giải màn hình. Input: {"width": <int>, "height": <int>}.
+- search_docs: tra cứu tài liệu hướng dẫn sử dụng phần mềm. Input: {"query": "<câu truy vấn>"}.
+
+QUY TẮC FORMAT (BẮT BUỘC TUÂN THỦ):
+- Mỗi bước, output đúng 3 dòng:
+  Thought: <suy luận của bạn>
+  Action: <tên tool>
+  Action Input: <JSON object hợp lệ trên một dòng>
+- Sau Action Input, DỪNG LẠI hoàn toàn. KHÔNG được tự bịa "Observation:" — hệ thống sẽ thêm vào.
+- Khi đã đủ thông tin để trả lời, KẾT THÚC bằng:
+  Thought: <suy luận cuối>
+  Final Answer: <câu trả lời cuối cho người dùng bằng tiếng Việt tự nhiên>
+- Sau Final Answer, DỪNG LẠI ngay lập tức. TUYỆT ĐỐI KHÔNG lặp lại Thought, Final Answer, hay bất kỳ nội dung nào nữa.
+- KHÔNG bao giờ output text trống/ rác / nội dung không thuộc format trên trước Thought.
+
+VÍ DỤ 1 — xem danh sách (Final Answer PHẢI xuống dòng từng độ phân giải, KHÔNG inline bằng dấu phẩy):
+User: có những độ phân giải nào?
+Thought: Người dùng muốn xem danh sách, mình gọi list_resolutions.
+Action: list_resolutions
+Action Input: {}
+Observation: 1. 3840x2160 @ 60Hz (native)
+2. 1920x1080 @ 60Hz
+Thought: Đã có danh sách, trình bày từng dòng cho dễ đọc.
+Final Answer: Hệ thống đang hỗ trợ các độ phân giải sau:
+1. 3840x2160 @ 60Hz (native)
+2. 1920x1080 @ 60Hz
+Bạn có thể nói "đổi sang số <n>" để chọn.
+
+VÍ DỤ 2 — đổi bằng số thứ tự (dùng state đã hiển thị):
+[State: Danh sách gần nhất: 1. 3840x2160 @ 60Hz; 2. 1920x1080 @ 60Hz]
+User: đổi qua 2
+Thought: Số 2 trong danh sách là 1920x1080, mình gọi change_resolution.
+Action: change_resolution
+Action Input: {"width": 1920, "height": 1080}
+Observation: {"success": true, "applied": {"width": 1920, "height": 1080}, "previous": {"width": 3840, "height": 2160, "refreshRate": 60}}
+Thought: Đổi thành công, báo cho người dùng và gợi ý revert.
+Final Answer: Đã đổi sang 1920x1080. Nếu muốn quay lại độ phân giải cũ, bạn chỉ cần nói "khôi phục" nhé.
+
+VÍ DỤ 3 — revert (dùng state previous):
+[State: Độ phân giải cũ: 3840x2160]
+User: khôi phục
+Thought: Người dùng muốn quay lại độ phân giải cũ là 3840x2160.
+Action: change_resolution
+Action Input: {"width": 3840, "height": 2160}
+Observation: {"success": true, "applied": {"width": 3840, "height": 2160}, "previous": {"width": 1920, "height": 1080, "refreshRate": 60}}
+Thought: Đã khôi phục, báo cho người dùng.
+Final Answer: Đã khôi phục độ phân giải về 3840x2160.
+
+VÍ DỤ 4 — xem độ phân giải hiện tại:
+User: máy tôi đang ở độ phân giải nào?
+Thought: Người dùng muốn biết độ phân giải hiện tại, mình gọi get_current_resolution.
+Action: get_current_resolution
+Action Input: {}
+Observation: {"width": 1920, "height": 1080, "refreshRate": 60}
+Thought: Đã có thông tin, trả lời người dùng.
+Final Answer: Máy bạn đang ở độ phân giải 1920x1080 @ 60Hz.
+
+VÍ DỤ 5 — câu hỏi về tài liệu:
+User: phần mềm này dùng để làm gì?
+Thought: Đây là câu hỏi về tài liệu hướng dẫn, mình search.
+Action: search_docs
+Action Input: {"query": "phần mềm này dùng để làm gì"}
+Observation: <nội dung tài liệu>
+Thought: Đã có thông tin, trả lời người dùng.
+Final Answer: <tóm tắt từ tài liệu>
+
+LƯU Ý:
+- Chỉ dùng width/height có trong danh sách hỗ trợ.
+- Nếu user nói "số N" hoặc bare number N, tra cứu state "Danh sách gần nhất" để xác định width/height.
+- Nếu user yêu cầu revert/khôi phục/undo/về cũ, lấy width/height từ state "Độ phân giải cũ".
+- Nếu state "Danh sách gần nhất" rỗng mà user chọn theo số, gọi list_resolutions trước.
+- Nếu observation báo lỗi (ERROR / success=false), đưa Final Answer giải thích lịch sự cho người dùng."""
+
 
 class ChatService:
     def __init__(self) -> None:
@@ -25,29 +113,202 @@ class ChatService:
         self._model: Optional[Llama] = None
         self._embeddings: Optional[Vectorizer] = None
         self._collection = None
+        self._tooling: Optional[MCPToolingClient] = None
+        self._last_listed_resolutions: list[dict] = []
+        self._previous_resolution: Optional[dict] = None
 
-    def load(self) -> None:
+    async def load(self) -> None:
         print("[chat] Preparing model file...")
-        model_path = self._ensure_model_file()
+        model_path = await asyncio.to_thread(self._ensure_model_file)
         print(f"[chat] Loading model from: {model_path}")
-        self._model = Llama(model_path=str(model_path), n_ctx=MODEL_CONTEXT_TOKENS)
+        self._model = await asyncio.to_thread(
+            lambda: Llama(model_path=str(model_path), n_ctx=MODEL_CONTEXT_TOKENS)
+        )
         print("[chat] Model loaded.")
-        self._embeddings = get_vectorizer()
-        client = chromadb.PersistentClient(path=CHROMA_DIR)
+        self._embeddings = await asyncio.to_thread(get_vectorizer)
+        client = await asyncio.to_thread(chromadb.PersistentClient, path=CHROMA_DIR)
         self._collection = client.get_or_create_collection(COLLECTION_NAME)
 
-    def generate_reply(self, message: str) -> str:
-        if self._model is None:
-            raise RuntimeError("Model not loaded")
+        self._tooling = MCPToolingClient()
+        await self._tooling.start()
 
+    async def close(self) -> None:
+        if self._tooling is not None:
+            await self._tooling.close()
+            self._tooling = None
+
+    async def chat(self, message: str) -> str:
         if not message.strip():
             return ""
+        return await self._react_loop(message)
 
+    async def _react_loop(self, message: str, max_steps: int = 5) -> str:
+        scratchpad = ""
+        for step in range(max_steps):
+            prompt = self._build_react_prompt(message, scratchpad)
+            text = await self._llm_raw(
+                prompt,
+                max_tokens=400,
+                stop=["Observation:", "\nUser:", "\n\nUser:"],
+            )
+            if _DEBUG:
+                print(f"[react] step={step} raw={text.strip()!r}")
+
+            parsed = self._parse_react_step(text)
+
+            if "final_answer" in parsed:
+                final = parsed["final_answer"]
+                return self._dedupe_lines(self._clean_reply(final))
+
+            if "action" in parsed:
+                action = parsed["action"]
+                args = parsed.get("action_input", {})
+                observation = await self._execute_action(action, args)
+                if _DEBUG:
+                    print(f"[react] action={action} args={args}")
+                scratchpad += (
+                    f"{text.rstrip()}\nObservation: {observation}\n"
+                )
+                continue
+
+            return self._dedupe_lines(self._clean_reply(text))
+
+        return (
+            "Mình chưa hoàn tất yêu cầu của bạn trong giới hạn các bước cho phép. "
+            "Bạn thử nói lại rõ hơn nhé."
+        )
+
+    def _build_react_prompt(self, message: str, scratchpad: str) -> str:
+        if self._last_listed_resolutions:
+            last_listed = "\n".join(
+                f"  {i}. {r['width']}x{r['height']} @ {r['refreshRate']}Hz"
+                + (" (native)" if r.get("isNative") else "")
+                for i, r in enumerate(self._last_listed_resolutions, start=1)
+            )
+        else:
+            last_listed = "  (chưa hiển thị)"
+
+        prev = self._previous_resolution
+        prev_str = (
+            f"{prev['width']}x{prev['height']}"
+            if prev
+            else "(chưa có)"
+        )
+
+        state_block = (
+            "STATE HIỆN TẠI:\n"
+            f"- Danh sách gần nhất đã hiển thị:\n{last_listed}\n"
+            f"- Độ phân giải cũ (để revert): {prev_str}\n"
+        )
+
+        return (
+            f"{REACT_SYSTEM_PROMPT}\n\n"
+            f"{state_block}\n"
+            f"User: {message.strip()}\n"
+            f"{scratchpad}"
+        )
+
+    def _parse_react_step(self, text: str) -> dict:
+        final_match = re.search(
+            r"Final Answer:\s*(.+?)(?:\nThought:|\nAction:|\nObservation:|\nUser:|\Z)",
+            text,
+            re.DOTALL,
+        )
+        if final_match:
+            return {"final_answer": final_match.group(1).strip()}
+
+        action_match = re.search(r"Action:\s*([A-Za-z_][A-Za-z0-9_]*)", text)
+        if not action_match:
+            return {}
+
+        action = action_match.group(1).strip()
+
+        input_match = re.search(
+            r"Action Input:\s*(\{.*?\})",
+            text,
+            re.DOTALL,
+        )
+        args: dict[str, Any] = {}
+        if input_match:
+            try:
+                args = json.loads(input_match.group(1))
+            except json.JSONDecodeError:
+                args = {}
+
+        return {"action": action, "action_input": args}
+
+    async def _execute_action(self, action: str, args: dict) -> str:
+        if action == "list_resolutions":
+            if self._tooling is None:
+                return "ERROR: tooling không khả dụng. Hãy thông báo cho người dùng."
+            try:
+                resolutions = await self._tooling.call_tool(
+                    "list_resolutions", {}
+                )
+            except MCPUnavailableError:
+                return "ERROR: MCP server không kết nối được. Hãy thông báo cho người dùng và gợi ý thử lại sau."
+
+            if not resolutions:
+                return "Danh sách rỗng."
+
+            self._last_listed_resolutions = list(resolutions)
+            return "\n".join(
+                f"{i}. {r['width']}x{r['height']} @ {r['refreshRate']}Hz"
+                + (" (native)" if r.get("isNative") else "")
+                for i, r in enumerate(resolutions, start=1)
+            )
+
+        if action == "get_current_resolution":
+            if self._tooling is None:
+                return "ERROR: tooling không khả dụng. Hãy thông báo cho người dùng."
+            try:
+                result = await self._tooling.call_tool(
+                    "get_current_resolution", {}
+                )
+            except MCPUnavailableError:
+                return "ERROR: MCP server không kết nối được. Hãy thông báo cho người dùng và gợi ý thử lại sau."
+            return json.dumps(result or {}, ensure_ascii=False)
+
+        if action == "change_resolution":
+            if self._tooling is None:
+                return "ERROR: tooling không khả dụng."
+            try:
+                width = int(args.get("width"))
+                height = int(args.get("height"))
+            except (TypeError, ValueError):
+                return "ERROR: width và height phải là số nguyên."
+
+            try:
+                result = await self._tooling.call_tool(
+                    "change_resolution",
+                    {"width": width, "height": height},
+                )
+            except MCPUnavailableError:
+                return "ERROR: MCP server không kết nối được."
+
+            if result and result.get("success"):
+                prev = result.get("previous")
+                if prev:
+                    self._previous_resolution = prev
+            return json.dumps(result or {}, ensure_ascii=False)
+
+        if action == "search_docs":
+            query = args.get("query") or ""
+            if not query.strip():
+                return "ERROR: thiếu query."
+            return await self._search_docs(query)
+
+        return f"ERROR: tool '{action}' không tồn tại."
+
+    async def _search_docs(self, query: str) -> str:
         if self._embeddings is None or self._collection is None:
-            raise RuntimeError("Vector store not initialized")
+            return "ERROR: vector store chưa init."
 
-        query_vector = self._embeddings.embed_query(message.strip())
-        results = self._collection.query(
+        query_vector = await asyncio.to_thread(
+            self._embeddings.embed_query, query.strip()
+        )
+        results = await asyncio.to_thread(
+            self._collection.query,
             query_embeddings=[query_vector],
             n_results=TOP_K,
             include=["documents", "metadatas"],
@@ -55,40 +316,41 @@ class ChatService:
 
         documents = results.get("documents", [])
         if not documents or not documents[0]:
-            return "Khong tim thay thong tin phu hop trong tai lieu."
+            return "Không tìm thấy thông tin liên quan trong tài liệu."
 
-        context = "\n\n".join(documents[0])
-        prompt = (
-            "Bạn là trợ lý hướng dẫn sử dụng hệ thống. "
-            "Chỉ trả lời dựa trên tài liệu được cung cấp. "
-            "Hãy trả lời đúng trọng tâm câu hỏi, không tự diễn giải lan man. "
-            "Nếu tài liệu không có thông tin trực tiếp, hãy nói rõ là không tìm thấy.\n\n"
-            f"Tài liệu:\n{context}\n\n"
-            f"Câu hỏi: {message.strip()}\n"
-            "Trả lời ngắn gọn, đúng trọng tâm:"
-        )
+        return "\n\n".join(documents[0])
+
+    async def _llm_raw(
+        self,
+        prompt: str,
+        max_tokens: int = 400,
+        stop: Optional[list[str]] = None,
+    ) -> str:
+        if self._model is None:
+            raise RuntimeError("Model not loaded")
 
         prompt = self._trim_prompt(prompt)
-
-        result = self._model.create_completion(
+        result = await asyncio.to_thread(
+            self._model.create_completion,
             prompt=prompt,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens,
             temperature=self.temperature,
+            stop=stop or [],
         )
-        text = result["choices"][0]["text"]
-        return self._dedupe_lines(self._clean_reply(text))
+        return result["choices"][0]["text"]
 
     def _clean_reply(self, text: str) -> str:
         cleaned = text.strip()
         if not cleaned:
             return cleaned
 
-        if "Trả lời:" in cleaned:
-            cleaned = cleaned.split("Trả lời:")[-1].strip()
+        if "Final Answer:" in cleaned:
+            cleaned = cleaned.split("Final Answer:", 1)[1].strip()
 
-        for marker in ("Câu hỏi:", "Tài liệu:"):
-            if marker in cleaned:
-                cleaned = cleaned.split(marker)[0].strip()
+        for marker in ("Thought:", "Action:", "Observation:", "User:"):
+            idx = cleaned.find(marker)
+            if idx != -1:
+                cleaned = cleaned[:idx].strip()
 
         return cleaned
 
@@ -96,23 +358,27 @@ class ChatService:
         if not text:
             return text
 
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if not lines:
+        lines = [line.rstrip() for line in text.splitlines()]
+        if not any(line.strip() for line in lines):
             return ""
 
-        output_lines = []
+        output_lines: list[str] = []
         last = None
         repeats = 0
         for line in lines:
-            if line == last:
+            if line.strip() and line == last:
                 repeats += 1
                 if repeats >= 2:
                     continue
             else:
                 repeats = 0
                 last = line
-
             output_lines.append(line)
+
+        while output_lines and not output_lines[0].strip():
+            output_lines.pop(0)
+        while output_lines and not output_lines[-1].strip():
+            output_lines.pop()
 
         return "\n".join(output_lines)
 
@@ -120,7 +386,7 @@ class ChatService:
         if self._model is None:
             return prompt
 
-        max_prompt_tokens = max(MODEL_CONTEXT_TOKENS - 128, 64)
+        max_prompt_tokens = max(MODEL_CONTEXT_TOKENS - 512, 64)
         tokens = self._model.tokenize(prompt.encode("utf-8"))
         if len(tokens) <= max_prompt_tokens:
             return prompt

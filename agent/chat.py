@@ -1,23 +1,32 @@
+import asyncio
+
 from chat_service import ChatService
 
 
-def main() -> int:
+async def main_async() -> int:
     service = ChatService()
-    service.load()
+    await service.load()
 
-    print("Type your message (/exit to quit).")
-    while True:
-        message = input("> ").strip()
-        if message.lower() == "/exit":
-            break
+    print("Type your message (/exit, exit, quit, thoát to quit).")
+    try:
+        while True:
+            message = (await asyncio.to_thread(input, "> ")).strip()
+            if message.lower() in ("/exit", "exit", "quit", "/quit", "thoát", "/thoát"):
+                break
 
-        if not message:
-            continue
+            if not message:
+                continue
 
-        reply = service.generate_reply(message)
-        print(f"Bot: {reply}\n")
+            reply = await service.chat(message)
+            print(f"Bot: {reply}\n")
+    finally:
+        await service.close()
 
     return 0
+
+
+def main() -> int:
+    return asyncio.run(main_async())
 
 
 if __name__ == "__main__":

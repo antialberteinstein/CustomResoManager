@@ -1,11 +1,22 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel
 
 from chat_service import ChatService
 
-app = FastAPI(title="Local LLM Chat Server")
 _chat_service = ChatService()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _chat_service.load()
+    yield
+    await _chat_service.close()
+
+
+app = FastAPI(title="Local LLM Chat Server", lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
@@ -17,16 +28,11 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@app.on_event("startup")
-def load_model() -> None:
-    _chat_service.load()
-
-
 @app.post("/chat")
-def chat(request: ChatRequest) -> dict:
+async def chat(request: ChatRequest) -> dict:
     try:
         print(f"[chat] request: {request.message!r}")
-        reply = _chat_service.generate_reply(request.message)
+        reply = await _chat_service.chat(request.message)
         print("[chat] reply generated")
         return {"reply": reply}
     except RuntimeError as ex:
