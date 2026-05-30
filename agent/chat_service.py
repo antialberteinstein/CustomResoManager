@@ -32,6 +32,7 @@ TOOL có sẵn:
 - list_resolutions: lấy danh sách độ phân giải hệ thống hỗ trợ. Input: {}.
 - get_current_resolution: lấy độ phân giải đang dùng của màn hình. Input: {}.
 - change_resolution: đổi độ phân giải màn hình. Input: {"width": <int>, "height": <int>}.
+- revert_resolution: khôi phục về độ phân giải ngay trước lần đổi gần nhất. Server tự nhớ giá trị cũ nên không cần truyền width/height. Input: {}.
 - search_docs: tra cứu tài liệu hướng dẫn sử dụng phần mềm. Input: {"query": "<câu truy vấn>"}.
 
 QUY TẮC FORMAT (BẮT BUỘC TUÂN THỦ):
@@ -69,12 +70,11 @@ Observation: {"success": true, "applied": {"width": 1920, "height": 1080}, "prev
 Thought: Đổi thành công, báo cho người dùng và gợi ý revert.
 Final Answer: Đã đổi sang 1920x1080. Nếu muốn quay lại độ phân giải cũ, bạn chỉ cần nói "khôi phục" nhé.
 
-VÍ DỤ 3 — revert (dùng state previous):
-[State: Độ phân giải cũ: 3840x2160]
+VÍ DỤ 3 — revert (server tự nhớ độ phân giải cũ, KHÔNG cần truyền width/height):
 User: khôi phục
-Thought: Người dùng muốn quay lại độ phân giải cũ là 3840x2160.
-Action: change_resolution
-Action Input: {"width": 3840, "height": 2160}
+Thought: Người dùng muốn quay lại độ phân giải trước đó, mình gọi revert_resolution.
+Action: revert_resolution
+Action Input: {}
 Observation: {"success": true, "applied": {"width": 3840, "height": 2160}, "previous": {"width": 1920, "height": 1080, "refreshRate": 60}}
 Thought: Đã khôi phục, báo cho người dùng.
 Final Answer: Đã khôi phục độ phân giải về 3840x2160.
@@ -100,7 +100,7 @@ Final Answer: <tóm tắt từ tài liệu>
 LƯU Ý:
 - Chỉ dùng width/height có trong danh sách hỗ trợ.
 - Nếu user nói "số N" hoặc bare number N, tra cứu state "Danh sách gần nhất" để xác định width/height.
-- Nếu user yêu cầu revert/khôi phục/undo/về cũ, lấy width/height từ state "Độ phân giải cũ".
+- Nếu user yêu cầu revert/khôi phục/undo/về cũ, gọi revert_resolution với Input {} (server tự biết độ phân giải cũ, không cần width/height).
 - Nếu state "Danh sách gần nhất" rỗng mà user chọn theo số, gọi list_resolutions trước.
 - Nếu observation báo lỗi (ERROR / success=false), đưa Final Answer giải thích lịch sự cho người dùng."""
 
@@ -283,6 +283,20 @@ class ChatService:
                     "change_resolution",
                     {"width": width, "height": height},
                 )
+            except MCPUnavailableError:
+                return "ERROR: MCP server không kết nối được."
+
+            if result and result.get("success"):
+                prev = result.get("previous")
+                if prev:
+                    self._previous_resolution = prev
+            return json.dumps(result or {}, ensure_ascii=False)
+
+        if action == "revert_resolution":
+            if self._tooling is None:
+                return "ERROR: tooling không khả dụng."
+            try:
+                result = await self._tooling.call_tool("revert_resolution", {})
             except MCPUnavailableError:
                 return "ERROR: MCP server không kết nối được."
 

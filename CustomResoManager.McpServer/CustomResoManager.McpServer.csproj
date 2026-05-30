@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CustomResoManager.McpServer</RootNamespace>
+    <AssemblyName>CustomResoManager.McpServer</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Official C# MCP SDK (ASP.NET Core integration, Streamable HTTP transport).
+      The package is in preview; if this exact version fails to restore, run:
+          dotnet add package ModelContextProtocol.AspNetCore --prerelease
+    -->
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Reuse the existing Win32 tooling from the main project WITHOUT pulling in WPF.
+      Core/ and Models/ have no WPF dependency, so we link the source files directly
+      instead of referencing the WinExe/WPF project.
+    -->
+    <Compile Include="..\Models\DisplaySettingModel.cs" Link="Linked\DisplaySettingModel.cs" />
+    <Compile Include="..\Core\NativeMethods.cs" Link="Linked\NativeMethods.cs" />
+    <Compile Include="..\Core\ResolutionManager.cs" Link="Linked\ResolutionManager.cs" />
+  </ItemGroup>
+
+</Project>
