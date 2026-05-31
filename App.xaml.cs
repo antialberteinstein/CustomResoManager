@@ -54,6 +54,10 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // An toàn: dừng engine + trả về độ phân giải gốc dù app đóng theo đường nào.
+        // (Stop là idempotent — MainWindow.OnClosed thường đã gọi trước đó.)
+        AppEngine?.Stop();
+
         _mcpHost?.StopAsync().GetAwaiter().GetResult();
         base.OnExit(e);
     }

@@ -94,6 +94,8 @@ namespace CustomResoManager.Core
 
         public void Stop()
         {
+            bool wasRunning = _hook != IntPtr.Zero;
+
             if (_hook != IntPtr.Zero)
             {
                 NativeMethods.UnhookWinEvent(_hook);
@@ -106,12 +108,15 @@ namespace CustomResoManager.Core
 
             lock (_gate)
             {
-                if (_activeProfile != null)
-                {
+                bool hadActive = _activeProfile != null;
+                _activeProfile = null;
+
+                // LUÔN trả màn hình về độ phân giải gốc của máy khi dừng engine.
+                if (wasRunning)
                     RestoreBaseline();
-                    _activeProfile = null;
+
+                if (hadActive)
                     ProfileDeactivated?.Invoke(this, EventArgs.Empty);
-                }
             }
         }
 
