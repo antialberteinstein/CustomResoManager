@@ -1,0 +1,166 @@
+================================================================================
+HƯỚNG DẪN SỬ DỤNG — CUSTOM RESOLUTION MANAGER
+================================================================================
+
+Tài liệu này hướng dẫn sử dụng phần mềm theo HAI cách:
+  (A) Sử dụng bằng tay trên giao diện (GUI).
+  (B) Sử dụng bằng chatbot (trợ lý AI) — nhắn tiếng Việt tự nhiên.
+
+
+--------------------------------------------------------------------------------
+1. GIỚI THIỆU
+--------------------------------------------------------------------------------
+Custom Resolution Manager là ứng dụng Windows giúp TỰ ĐỘNG đổi độ phân giải màn
+hình theo ứng dụng đang được focus. Mỗi ứng dụng có thể gắn một "profile" độ phân
+giải riêng: khi ứng dụng đó được đưa lên trước (focus), màn hình tự chuyển sang độ
+phân giải của profile; khi rời sang ứng dụng khác (ngoài danh sách), màn hình trả
+về độ phân giải gốc.
+
+Phần mềm gồm:
+  - Ứng dụng WPF (giao diện chính + engine đổi độ phân giải).
+  - MCP Server (cổng điều khiển, mặc định cổng 7777) để chatbot ra lệnh.
+  - Agent AI (chatbot, mặc định cổng 8000) — chạy mô hình ngôn ngữ cục bộ.
+
+
+--------------------------------------------------------------------------------
+2. KHỞI ĐỘNG HỆ THỐNG
+--------------------------------------------------------------------------------
+2.1. Mở ứng dụng chính:
+     - Chạy ứng dụng WPF (CustomResoManager). Khi mở, MCP Server tự chạy nền.
+
+2.2. Mở chatbot (nếu muốn dùng trợ lý AI):
+     - Vào thư mục agent, cài thư viện lần đầu:  python install_llama_cpp.py
+       rồi:  pip install -r requirements.txt
+     - Index tài liệu hướng dẫn (lần đầu hoặc khi sửa tài liệu):  python dataloader.py
+     - Chạy chatbot:  python main.py   (hoặc python run.py)
+     - Trong app, panel "AI Assistant" sẽ hiện "Connected" khi kết nối được.
+
+
+--------------------------------------------------------------------------------
+3. (A) SỬ DỤNG BẰNG TAY TRÊN GIAO DIỆN
+--------------------------------------------------------------------------------
+
+3.1. BẬT / TẮT ENGINE
+   - Nút "▶ Start Engine" ở thanh tiêu đề: bật chế độ tự đổi độ phân giải theo focus.
+   - Khi đang chạy, nút đổi thành "⏹ Stop Engine"; bấm để dừng.
+   - Khi DỪNG, màn hình LUÔN trả về độ phân giải gốc lúc bật engine.
+   - Đóng ứng dụng cũng tự dừng engine và trả về độ phân giải gốc.
+
+3.2. THÊM MỘT PROFILE (ba cách thêm app — nằm trên cùng một hàng)
+   - 📁 Chọn file: chọn file .exe hoặc shortcut .lnk; .lnk được resolve về .exe để
+     lấy tên tiến trình.
+   - 🗔 Tất cả app: liệt kê mọi app đã cài (quét shortcut Start Menu), có ô tìm kiếm;
+     chọn app → tự điền tên tiến trình.
+   - ⚙ Tiến trình chạy: liệt kê các tiến trình đang chạy có cửa sổ thật; chọn → điền tên.
+   - Ngoài ra có thể GÕ TAY tên tiến trình (không cần đuôi .exe).
+   Sau khi có tên tiến trình:
+   - Chọn độ phân giải mục tiêu (và refresh rate nếu muốn) → bấm "Save" để lưu profile.
+
+3.3. QUẢN LÝ DANH SÁCH PROFILE (bảng DataGrid)
+   - Sửa độ phân giải ngay trên từng dòng (ComboBox trong bảng).
+   - Cột "On" (checkbox): bật/tắt từng profile mà không cần xoá.
+   - Nút "Delete": xoá profile (có hỏi xác nhận).
+   - Bảng hiển thị: Process, Resolution, Ratio (tỷ lệ khung hình), Hz.
+   - Khi một profile đang được áp dụng, có banner "Profile active".
+
+3.4. PANEL AI ASSISTANT (bên phải)
+   - Ô chat để trò chuyện với trợ lý.
+   - Chấm + nhãn trạng thái Connected/Disconnected tới agent.
+   - Gửi câu hỏi → nhận trả lời; trợ lý có thể trực tiếp thực hiện hành động (xem phần B).
+
+GHI CHÚ: Mọi thay đổi do chatbot thực hiện (đổi độ phân giải, thêm/sửa/xoá profile,
+bật/tắt engine) sẽ TỰ ĐỘNG phản ánh lên giao diện — nút engine, danh sách profile và
+độ phân giải hiện tại tự cập nhật, không cần bấm tải lại.
+
+
+--------------------------------------------------------------------------------
+4. (B) SỬ DỤNG BẰNG CHATBOT
+--------------------------------------------------------------------------------
+Nhắn tiếng Việt tự nhiên trong panel AI Assistant. Bot sẽ tự suy luận và gọi đúng
+chức năng. Dưới đây là các việc bot làm được kèm câu nói mẫu.
+
+4.1. ĐỘ PHÂN GIẢI
+   - Xem danh sách hỗ trợ:      "có những độ phân giải nào?"
+   - Xem độ phân giải hiện tại:  "máy tôi đang ở độ phân giải nào?"
+   - Đổi ngay lập tức:           "đổi sang 1920x1080"  /  "đổi qua số 2"
+   - Khôi phục độ phân giải cũ:  "khôi phục"  /  "về cũ"  /  "undo"
+   (Có thể chọn theo SỐ THỨ TỰ sau khi bot đã liệt kê danh sách.)
+
+4.2. QUẢN LÝ PROFILE
+   - Liệt kê profile đã lưu:     "liệt kê các profile"
+   - Tạo/cập nhật profile:       "khi mở notepad thì để màn hình 1280x720"
+   - Xoá profile:                "xoá profile của valorant"
+   - Bật/tắt profile:            "tắt profile csgo"  /  "bật lại profile notepad"
+   LƯU Ý: Nếu yêu cầu thêm app mà CHƯA cho độ phân giải, bot sẽ HỎI LẠI bạn muốn độ
+   phân giải nào rồi mới tạo — bot không tự bịa.
+
+4.3. ĐIỀU KHIỂN ENGINE
+   - Bật engine:                 "bật engine lên"
+   - Tắt engine:                 "tắt engine"  /  "dừng lại"
+   - Xem trạng thái:             "engine đang chạy không?"
+
+4.4. LIỆT KÊ TIẾN TRÌNH / ỨNG DỤNG TRÊN MÁY
+   - App đang chạy:              "có bao nhiêu app đang chạy?"  /  "liệt kê app đang mở"
+   - App đã cài:                 "trên máy có cài những app gì?"
+   (Bot liệt kê TỪNG app kèm số lượng, dùng để tìm đúng tên rồi thêm vào profile.)
+
+4.5. HỎI VỀ CÁCH DÙNG PHẦN MỀM
+   - "phần mềm này dùng để làm gì?"  /  "cách thêm app vào danh sách?"
+   (Bot tra cứu chính tài liệu này để trả lời.)
+
+VÍ DỤ HỘI THOẠI THÊM APP ĐANG CHẠY:
+   Bạn: "khi mở chrome thì để 1600x900"
+   Bot: (tra tên tiến trình "chrome" → tạo profile 1600x900) "Đã tạo profile cho
+        Chrome ở 1600x900. Bật engine để tự áp dụng khi bạn mở Chrome nhé."
+
+
+--------------------------------------------------------------------------------
+5. CẤU HÌNH MẠNG LAN (chạy app và chatbot trên 2 máy khác nhau)
+--------------------------------------------------------------------------------
+Có HAI file config.yaml, mỗi module một file:
+
+5.1. config.yaml của ứng dụng C# (cạnh file chạy của app):
+     mcpServer:   # cổng điều khiển mà app MỞ ra cho chatbot kết nối
+       host: auto       # 127.0.0.1 = chỉ máy này | 0.0.0.0 = mọi card mạng | auto = tự lấy IP LAN
+       port: 7777
+       path: /mcp
+     agent:       # địa chỉ chatbot mà app GỌI tới để chat
+       host: 127.0.0.1  # đổi thành IP LAN của máy chạy chatbot nếu khác máy
+       port: 8000
+
+5.2. agent/config.yaml của chatbot:
+     chat:        # cổng chatbot MỞ ra cho app kết nối
+       host: 0.0.0.0    # 0.0.0.0 = nhận từ LAN | 127.0.0.1 = chỉ máy này
+       port: 8000
+     mcpServer:   # địa chỉ MCP server của app mà chatbot GỌI tới
+       host: 127.0.0.1  # đổi thành IP LAN của máy chạy app nếu khác máy
+       port: 7777
+       path: /mcp
+
+QUY TẮC: app cần biết địa chỉ của chatbot (mục agent), chatbot cần biết địa chỉ của
+app (mục mcpServer). Sửa file xong thì khởi động lại module tương ứng.
+
+
+--------------------------------------------------------------------------------
+6. XỬ LÝ SỰ CỐ THƯỜNG GẶP
+--------------------------------------------------------------------------------
+- Panel AI báo "Disconnected":
+    + Chatbot chưa chạy → chạy "python main.py" trong thư mục agent.
+    + Sai địa chỉ → kiểm tra mục "agent" trong config.yaml của app trỏ đúng IP/cổng
+      của máy chạy chatbot.
+
+- "actively refused" / không kết nối được qua LAN:
+    + Máy đích đang chạy nhưng không có gì nghe ở cổng đó → kiểm tra đúng IP LAN
+      (không nhầm với địa chỉ gateway), và chatbot đặt host: 0.0.0.0.
+    + Tường lửa Windows: cho phép cổng 7777 (app) và 8000 (chatbot) ở mạng Private.
+
+- Chatbot không khởi động (lỗi llama.dll / 0xC000001D):
+    + Chạy "python install_llama_cpp.py": tự cài VC++ Redistributable, và nếu CPU
+      không hỗ trợ AVX2 sẽ tự biên dịch bản không-AVX (cần Visual Studio Build Tools).
+
+- Bot trả lời nhưng không liệt kê / hỏi xong không cập nhật giao diện:
+    + Khởi động lại chatbot để nạp lại cấu hình mới nhất.
+
+- Đổi độ phân giải bị giật/nhấp nháy nhẹ:
+    + Bình thường — đổi độ phân giải thật luôn có ~0.3–1.5s màn hình re-sync ở phần cứng.
+================================================================================

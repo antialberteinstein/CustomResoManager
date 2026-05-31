@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 import chromadb
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from config import (
@@ -19,6 +19,10 @@ def load_documents(docs_dir: Path) -> list:
     for pdf_path in docs_dir.glob("*.pdf"):
         loader = PyPDFLoader(str(pdf_path))
         documents.extend(loader.load())
+    # Cũng nạp tài liệu văn bản thuần (.txt) như HuongDanSuDung.txt.
+    for txt_path in docs_dir.glob("*.txt"):
+        loader = TextLoader(str(txt_path), encoding="utf-8")
+        documents.extend(loader.load())
     return documents
 
 
@@ -33,7 +37,7 @@ def main() -> int:
 
     documents = load_documents(docs_dir)
     if not documents:
-        raise SystemExit("No PDF files found to load.")
+        raise SystemExit("No .pdf or .txt files found to load.")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,

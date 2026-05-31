@@ -157,6 +157,18 @@ Observation: {"success": true, "profile": {"processName": "chrome", "width": 160
 Thought: Đã tạo xong.
 Final Answer: Đã tạo profile cho Chrome ở 1600x900. Bật engine để nó tự áp dụng khi bạn mở Chrome nhé.
 
+VÍ DỤ 10 — đếm/liệt kê app đang chạy (PHẢI liệt kê từng app, KHÔNG chỉ trả về số lượng):
+User: có bao nhiêu app đang chạy?
+Thought: Mình gọi list_running_processes để lấy danh sách.
+Action: list_running_processes
+Action Input: {}
+Observation: [{"processName": "chrome", "title": "Google Chrome"}, {"processName": "notepad", "title": "Untitled - Notepad"}, {"processName": "Code", "title": "chat_service.py - VS Code"}]
+Thought: Có 3 app. Phải nêu số lượng VÀ liệt kê từng cái, mỗi dòng một app.
+Final Answer: Hiện có 3 app đang chạy:
+1. chrome — Google Chrome
+2. notepad — Untitled - Notepad
+3. Code — chat_service.py - VS Code
+
 LƯU Ý:
 - Chỉ dùng width/height có trong danh sách hỗ trợ.
 - Nếu user nói "số N" hoặc bare number N, tra cứu state "Danh sách gần nhất" để xác định width/height.
@@ -170,6 +182,8 @@ LƯU Ý:
   Chỉ gọi add_profile khi đã biết cả width và height.
 - Để lấy đúng tên tiến trình (processName): dùng list_running_processes (app đang mở) hoặc
   list_installed_apps (app đã cài) khi user nói bằng tên thường (vd "chrome", "trình duyệt").
+- LIỆT KÊ / ĐẾM app/tiến trình/độ phân giải/profile: LUÔN liệt kê TỪNG mục, mỗi dòng một mục (kèm số
+  lượng nếu user hỏi "bao nhiêu"). KHÔNG được chỉ trả về con số rồi bỏ qua danh sách.
 - Nếu observation báo lỗi (ERROR / success=false), đưa Final Answer giải thích lịch sự cho người dùng."""
 
 
