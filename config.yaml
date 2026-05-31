@@ -17,5 +17,5 @@ mcpServer:
 #   Set host to the agent machine's LAN IP if it runs on a different computer,
 #   e.g. host: 192.168.1.50 ; otherwise 127.0.0.1 for same-machine.
 agent:
-  host: mac
+  host: 10.211.55.1
   port: 8000
