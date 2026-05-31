@@ -3,6 +3,7 @@ using CustomResoManager.Core;
 using CustomResoManager.McpServer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace CustomResoManager;
 
@@ -35,6 +36,11 @@ public partial class App : Application
             builder.Services.AddSingleton<IResolutionManager>(_ => ResolutionManager);
             builder.Services.AddSingleton<ServerState>();
 
+            // Rút ngắn thời gian shutdown để StopAsync không chờ drain các kết nối
+            // MCP (SSE long-lived) khi đóng app.
+            builder.Services.Configure<HostOptions>(o =>
+                o.ShutdownTimeout = TimeSpan.FromMilliseconds(500));
+
             builder.Services
                 .AddMcpServer()
                 .WithHttpTransport()
@@ -44,7 +50,9 @@ public partial class App : Application
             _mcpHost.Services.GetRequiredService<ServerState>();
             _mcpHost.MapMcp("/mcp");
 
-            await _mcpHost.RunAsync();
+            // StartAsync (thay vì RunAsync) để không gắn console lifetime và trả về
+            // ngay sau khi khởi động — vòng đời do OnExit kiểm soát.
+            await _mcpHost.StartAsync();
         }
         catch (Exception ex)
         {
@@ -58,7 +66,18 @@ public partial class App : Application
         // (Stop là idempotent — MainWindow.OnClosed thường đã gọi trước đó.)
         AppEngine?.Stop();
 
-        _mcpHost?.StopAsync().GetAwaiter().GetResult();
+        // Dừng MCP server NGAY khi Close (timeout ngắn, không chờ drain kết nối).
+        try
+        {
+            _mcpHost?.StopAsync(TimeSpan.FromMilliseconds(500)).GetAwaiter().GetResult();
+            _mcpHost?.Dispose();
+        }
+        catch { /* best-effort: vẫn thoát dù MCP dừng lỗi */ }
+
         base.OnExit(e);
+
+        // Bảo đảm tiến trình thoát ngay lập tức kể cả khi Kestrel/kết nối MCP còn
+        // luồng nền giữ tiến trình sống.
+        Environment.Exit(0);
     }
 }

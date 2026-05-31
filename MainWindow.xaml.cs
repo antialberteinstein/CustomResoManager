@@ -337,6 +337,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void btnAllApps_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new InstalledAppPickerWindow { Owner = this };
+        if (picker.ShowDialog() == true && !string.IsNullOrWhiteSpace(picker.SelectedProcessName))
+        {
+            txtProcessName.Text = picker.SelectedProcessName;
+        }
+    }
+
     private void btnBrowseFile_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
