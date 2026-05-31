@@ -141,8 +141,8 @@
                         <!-- Inputs -->
                         <TextBox x:Name="txtProcessName" Grid.Row="2"
                                  AllowDrop="True"
-                                 DragOver="txtProcessName_DragOver"
-                                 Drop="txtProcessName_Drop"
+                                 PreviewDragOver="txtProcessName_DragOver"
+                                 PreviewDrop="txtProcessName_Drop"
                                  ToolTip="Drag an .exe file here to auto-fill"/>
                         <ComboBox x:Name="cmbResolution" Grid.Row="2" Grid.Column="2"
                                   SelectionChanged="cmbResolution_SelectionChanged"/>

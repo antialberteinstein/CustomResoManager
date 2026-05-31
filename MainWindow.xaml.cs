@@ -288,18 +288,23 @@ public partial class MainWindow : Window
 
     private void txtProcessName_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
-            ? DragDropEffects.Copy
-            : DragDropEffects.None;
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
         e.Handled = true;
     }
 
     private void txtProcessName_Drop(object sender, DragEventArgs e)
     {
+        e.Handled = true;
         if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
         {
-            var name = System.IO.Path.GetFileNameWithoutExtension(files[0]);
-            txtProcessName.Text = name;
+            txtProcessName.Text = System.IO.Path.GetFileNameWithoutExtension(files[0]);
         }
     }
 
