@@ -123,17 +123,9 @@
                            FontFamily="Segoe UI" FontSize="16" FontWeight="Bold"
                            Foreground="White" VerticalAlignment="Center"/>
 
-                <!-- Status + current resolution (centered) -->
+                <!-- Current resolution (centered) -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Border x:Name="statusDot" Width="10" Height="10" CornerRadius="5"
-                            Background="#607D8B" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="txtStatus" Text="Engine Stopped"
-                               FontFamily="Segoe UI" FontSize="13"
-                               Foreground="#90A4AE" VerticalAlignment="Center"/>
-                    <TextBlock Text="   ·   "
-                               FontFamily="Segoe UI" FontSize="13"
-                               Foreground="#546E7A" VerticalAlignment="Center"/>
                     <TextBlock Text="Resolution: "
                                FontFamily="Segoe UI" FontSize="13"
                                Foreground="#90A4AE" VerticalAlignment="Center"/>
@@ -177,27 +169,37 @@
                             <ColumnDefinition Width="75"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Button bar: nguồn thêm app (to, rõ; tự xuống dòng nếu hẹp) -->
-                        <WrapPanel Grid.Row="0" Grid.ColumnSpan="7" Orientation="Horizontal">
-                            <TextBlock Text="Thêm app từ:" VerticalAlignment="Center"
-                                       FontFamily="Segoe UI" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#546E7A" Margin="0,0,10,6"/>
-                            <Button x:Name="btnBrowseFile" Content="📁  Chọn file (.exe/.lnk)"
+                        <!-- Button bar: 3 nguồn thêm app, chia đều trên CÙNG MỘT dòng -->
+                        <Grid Grid.Row="0" Grid.ColumnSpan="7">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="btnBrowseFile" Grid.Column="0"
+                                    Content="📁  Chọn file"
+                                    ToolTip="Chọn file .exe hoặc shortcut .lnk"
                                     Click="btnBrowseFile_Click"
                                     Background="#455A64" Foreground="White"
-                                    FontSize="13" FontWeight="SemiBold" Padding="16,9" Margin="0,0,10,6"
+                                    FontSize="13" FontWeight="SemiBold" Padding="8,9"
                                     Style="{StaticResource FlatButton}"/>
-                            <Button x:Name="btnAllApps" Content="🗔  Tất cả app trên máy"
+                            <Button x:Name="btnAllApps" Grid.Column="2"
+                                    Content="🗔  Tất cả app"
+                                    ToolTip="Liệt kê tất cả app đã cài trên máy"
                                     Click="btnAllApps_Click"
                                     Background="#455A64" Foreground="White"
-                                    FontSize="13" FontWeight="SemiBold" Padding="16,9" Margin="0,0,10,6"
+                                    FontSize="13" FontWeight="SemiBold" Padding="8,9"
                                     Style="{StaticResource FlatButton}"/>
-                            <Button x:Name="btnPickProcess" Content="⚙  Tiến trình đang chạy"
+                            <Button x:Name="btnPickProcess" Grid.Column="4"
+                                    Content="⚙  Tiến trình chạy"
+                                    ToolTip="Chọn từ các tiến trình đang chạy"
                                     Click="btnPickProcess_Click"
                                     Background="#455A64" Foreground="White"
-                                    FontSize="13" FontWeight="SemiBold" Padding="16,9" Margin="0,0,10,6"
+                                    FontSize="13" FontWeight="SemiBold" Padding="8,9"
                                     Style="{StaticResource FlatButton}"/>
-                        </WrapPanel>
+                        </Grid>
 
                         <!-- Labels -->
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="Tên tiến trình:"

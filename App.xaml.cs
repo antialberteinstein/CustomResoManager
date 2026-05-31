@@ -62,22 +62,14 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // An toàn: dừng engine + trả về độ phân giải gốc dù app đóng theo đường nào.
-        // (Stop là idempotent — MainWindow.OnClosed thường đã gọi trước đó.)
+        // Trả về độ phân giải gốc trước khi thoát (idempotent — OnClosed thường đã gọi).
         AppEngine?.Stop();
-
-        // Dừng MCP server NGAY khi Close (timeout ngắn, không chờ drain kết nối).
-        try
-        {
-            _mcpHost?.StopAsync(TimeSpan.FromMilliseconds(500)).GetAwaiter().GetResult();
-            (_mcpHost as IDisposable)?.Dispose();
-        }
-        catch { /* best-effort: vẫn thoát dù MCP dừng lỗi */ }
 
         base.OnExit(e);
 
-        // Bảo đảm tiến trình thoát ngay lập tức kể cả khi Kestrel/kết nối MCP còn
-        // luồng nền giữ tiến trình sống.
+        // Kết liễu tiến trình NGAY & dứt khoát. KHÔNG chờ MCP StopAsync (dễ treo trên
+        // UI thread do kết nối SSE long-lived) — Environment.Exit hạ toàn bộ luồng nền
+        // gồm Kestrel/MCP, bảo đảm không còn server chạy nền sau khi đóng app.
         Environment.Exit(0);
     }
 }

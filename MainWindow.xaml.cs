@@ -191,14 +191,7 @@ public partial class MainWindow : Window
 
     private void SetEngineStatus(bool running, string statusText)
     {
-        statusDot.Background = running
-            ? new SolidColorBrush(Color.FromRgb(76, 175, 80))
-            : new SolidColorBrush(Color.FromRgb(96, 125, 139));
-
-        txtStatus.Text = statusText;
-        txtStatus.Foreground = running
-            ? new SolidColorBrush(Color.FromRgb(128, 203, 196))
-            : new SolidColorBrush(Color.FromRgb(144, 164, 174));
+        _ = statusText; // không còn hiển thị status text trên header (trạng thái thể hiện qua nút)
 
         btnToggleEngine.Content = running ? "⏹  Stop Engine" : "▶  Start Engine";
         btnToggleEngine.Background = running
@@ -229,13 +222,16 @@ public partial class MainWindow : Window
         });
     }
 
+    private string? _lastEngineError;
+
     private void OnEngineError(object? sender, string errMsg)
     {
         Dispatcher.Invoke(() =>
         {
-            statusDot.Background = new SolidColorBrush(Colors.OrangeRed);
-            txtStatus.Text = $"Error: {errMsg}";
-            txtStatus.Foreground = new SolidColorBrush(Colors.OrangeRed);
+            // Hiện lỗi nhưng tránh spam: chỉ báo khi nội dung lỗi đổi.
+            if (errMsg == _lastEngineError) return;
+            _lastEngineError = errMsg;
+            MessageBox.Show(errMsg, "Engine error", MessageBoxButton.OK, MessageBoxImage.Warning);
         });
     }
 
@@ -246,14 +242,15 @@ public partial class MainWindow : Window
         if (_appEngine.IsRunning)
         {
             _appEngine.Stop();
-            SetEngineStatus(false, "Engine Stopped");
+            SetEngineStatus(false, "");
             activeProfileBanner.Visibility = Visibility.Collapsed;
             RefreshCurrentResolution();
         }
         else
         {
+            _lastEngineError = null; // cho phép báo lại lỗi mới ở lần chạy này
             _appEngine.Start();
-            SetEngineStatus(true, "Engine đang chạy — theo dõi app đang focus...");
+            SetEngineStatus(true, "");
         }
     }
 
