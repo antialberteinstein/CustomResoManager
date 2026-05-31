@@ -34,6 +34,9 @@ public partial class MainWindow : Window
         public int? TargetRefreshRate { get; set; }
         public string ExpectedAspectRatio { get; set; } = string.Empty;
 
+        /// <summary>Lựa chọn độ phân giải hiện tại của dòng (bind tới ComboBox trong DataGrid).</summary>
+        public ResolutionOption? SelectedResolution { get; set; }
+
         public string ResolutionDisplay => $"{TargetWidth}×{TargetHeight}";
         public string RefreshRateDisplay => TargetRefreshRate.HasValue ? $"{TargetRefreshRate}" : "—";
 
@@ -44,20 +47,43 @@ public partial class MainWindow : Window
             TargetWidth = p.TargetWidth,
             TargetHeight = p.TargetHeight,
             TargetRefreshRate = p.TargetRefreshRate,
-            ExpectedAspectRatio = p.ExpectedAspectRatio
+            ExpectedAspectRatio = p.ExpectedAspectRatio,
+            SelectedResolution = new ResolutionOption(p.TargetWidth, p.TargetHeight)
         };
     }
 
-    private record ResolutionOption(int Width, int Height)
+    public record ResolutionOption(int Width, int Height)
     {
         public override string ToString() => $"{Width} × {Height}";
     }
+
+    /// <summary>Danh sách độ phân giải dùng cho ComboBox chỉnh sửa trong DataGrid.</summary>
+    public List<ResolutionOption> ResolutionOptions { get; private set; } = [];
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
     public MainWindow()
     {
         InitializeComponent();
+
+        txtProcessName.AddHandler(UIElement.DragOverEvent, new DragEventHandler((s, e) =>
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+            e.Handled = true;
+        }), handledEventsToo: true);
+
+        txtProcessName.AddHandler(UIElement.DropEvent, new DragEventHandler((s, e) =>
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
+            {
+                string? name = ResolveDroppedFileToProcessName(files[0]);
+                if (!string.IsNullOrWhiteSpace(name))
+                    txtProcessName.Text = name;
+            }
+            e.Handled = true;
+        }), handledEventsToo: true);
 
         _resolutionManager = App.ResolutionManager;
         _profileManager = App.ProfileManager;
@@ -67,10 +93,44 @@ public partial class MainWindow : Window
         _appEngine.ProfileDeactivated += OnProfileDeactivated;
         _appEngine.EngineError += OnEngineError;
 
-        RefreshProfileList();
+        // LoadResolutionOptions phải chạy trước RefreshProfileList để ComboBox trong
+        // DataGrid có sẵn nguồn dữ liệu (ResolutionOptions) khi các dòng được dựng.
         LoadResolutionOptions();
+        RefreshProfileList();
         RefreshCurrentResolution();
         _ = CheckChatConnectionAsync();
+    }
+
+    /// <summary>
+    /// Trả tên tiến trình (không đuôi) từ file được kéo vào. Hỗ trợ .exe và shortcut .lnk
+    /// (resolve target qua WScript.Shell COM, late-binding để không cần thêm COM reference).
+    /// </summary>
+    private static string? ResolveDroppedFileToProcessName(string path)
+    {
+        try
+        {
+            string target = path;
+
+            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            {
+                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType != null)
+                {
+                    dynamic shell = Activator.CreateInstance(shellType)!;
+                    dynamic shortcut = shell.CreateShortcut(path);
+                    string resolved = shortcut.TargetPath;
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                        target = resolved;
+                }
+            }
+
+            return System.IO.Path.GetFileNameWithoutExtension(target);
+        }
+        catch
+        {
+            // Nếu resolve .lnk lỗi, fallback dùng chính tên file được kéo vào.
+            return System.IO.Path.GetFileNameWithoutExtension(path);
+        }
     }
 
     // ── UI helpers ────────────────────────────────────────────────────────────
@@ -97,6 +157,7 @@ public partial class MainWindow : Window
                 .Select(g => new ResolutionOption(g.Key.Width, g.Key.Height))
                 .ToList();
 
+            ResolutionOptions = options;   // nguồn cho ComboBox chỉnh sửa trong DataGrid
             cmbResolution.ItemsSource = options;
             if (options.Count > 0) cmbResolution.SelectedIndex = 0;
         }
@@ -181,7 +242,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            SetEngineStatus(true, "Engine Running — watching for games...");
+            SetEngineStatus(true, "Engine đang chạy — theo dõi app đang focus...");
             activeProfileBanner.Visibility = Visibility.Collapsed;
             RefreshCurrentResolution();
         });
@@ -211,7 +272,7 @@ public partial class MainWindow : Window
         else
         {
             _appEngine.Start();
-            SetEngineStatus(true, "Engine Running — watching for games...");
+            SetEngineStatus(true, "Engine đang chạy — theo dõi app đang focus...");
         }
     }
 
@@ -286,26 +347,34 @@ public partial class MainWindow : Window
         }
     }
 
-    private void txtProcessName_DragOver(object sender, DragEventArgs e)
+    private void btnPickProcess_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        var picker = new ProcessPickerWindow { Owner = this };
+        if (picker.ShowDialog() == true && !string.IsNullOrWhiteSpace(picker.SelectedProcessName))
         {
-            e.Effects = DragDropEffects.Copy;
+            txtProcessName.Text = picker.SelectedProcessName;
         }
-        else
-        {
-            e.Effects = DragDropEffects.None;
-        }
-        e.Handled = true;
     }
 
-    private void txtProcessName_Drop(object sender, DragEventArgs e)
+    private void dgResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        e.Handled = true;
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
-        {
-            txtProcessName.Text = System.IO.Path.GetFileNameWithoutExtension(files[0]);
-        }
+        if (sender is not ComboBox { Tag: string processName, SelectedItem: ResolutionOption opt })
+            return;
+
+        var profile = _profileManager.GetProfile(processName);
+        if (profile is null) return;
+
+        // Bỏ qua khi giá trị không đổi (gồm cả lần bind đầu tiên) để tránh lưu/đệ quy thừa.
+        if (profile.TargetWidth == opt.Width && profile.TargetHeight == opt.Height)
+            return;
+
+        profile.TargetWidth = opt.Width;
+        profile.TargetHeight = opt.Height;
+        profile.TargetRefreshRate = null; // Hz cũ có thể không hợp lệ với độ phân giải mới
+        profile.ExpectedAspectRatio = AspectRatioCalculator.CalculateAspectRatio(opt.Width, opt.Height);
+        _profileManager.AddOrUpdateProfile(profile);
+
+        RefreshProfileList(); // cập nhật cột Ratio / Hz hiển thị
     }
 
     private void cmbResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)

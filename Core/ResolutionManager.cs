@@ -11,6 +11,7 @@ namespace CustomResoManager.Core
         ResolutionModel GetCurrentResolution();
         List<ResolutionModel> GetSupportedResolutions();
         bool ChangeResolution(int width, int height);
+        bool ChangeResolution(int width, int height, int? refreshRate);
         void RestoreNativeResolution();
     }
 
@@ -94,9 +95,15 @@ namespace CustomResoManager.Core
         }
 
         /// <summary>
-        /// Changes the current resolution.
+        /// Changes the current resolution, keeping the current refresh rate.
         /// </summary>
-        public bool ChangeResolution(int width, int height)
+        public bool ChangeResolution(int width, int height) => ChangeResolution(width, height, null);
+
+        /// <summary>
+        /// Changes the current resolution. When <paramref name="refreshRate"/> is provided,
+        /// the display frequency is also applied; otherwise the current frequency is kept.
+        /// </summary>
+        public bool ChangeResolution(int width, int height, int? refreshRate)
         {
             try
             {
@@ -112,6 +119,12 @@ namespace CustomResoManager.Core
                 devMode.dmPelsWidth = width;
                 devMode.dmPelsHeight = height;
                 devMode.dmFields = NativeMethods.DM_PELSWIDTH | NativeMethods.DM_PELSHEIGHT;
+
+                if (refreshRate.HasValue && refreshRate.Value > 0)
+                {
+                    devMode.dmDisplayFrequency = refreshRate.Value;
+                    devMode.dmFields |= NativeMethods.DM_DISPLAYFREQUENCY;
+                }
 
                 // Attempt to change resolution temporarily
                 int result = NativeMethods.ChangeDisplaySettings(ref devMode, 0); // No CDS_UPDATEREGISTRY flag so it doesn't persist across reboots

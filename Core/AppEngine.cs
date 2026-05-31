@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -14,151 +13,217 @@ namespace CustomResoManager.Core
         void Stop();
         bool IsRunning { get; }
         GameProfile? CurrentActiveProfile { get; }
-        
+
         // Sự kiện để báo cho UI (ViewModel) biết trạng thái đang đổi/khôi phục
         event EventHandler<GameProfile>? ProfileActivated;
         event EventHandler? ProfileDeactivated;
         event EventHandler<string>? EngineError;
     }
 
+    /// <summary>
+    /// Theo dõi cửa sổ đang được FOCUS (foreground). Khi app đang focus khớp một profile
+    /// đang bật, màn hình tự đổi sang độ phân giải của profile đó. Khi focus sang app
+    /// ngoài danh sách, màn hình trả về độ phân giải gốc (baseline) lúc Start().
+    /// </summary>
     public class AppEngine : IAppEngine, IDisposable
     {
         private readonly IResolutionManager _resolutionManager;
         private readonly IProfileManager _profileManager;
-        private readonly IWindowScaler _windowScaler; // Thêm WindowScaler
-        
-        private CancellationTokenSource? _cancellationTokenSource;
-        private GameProfile? _activeProfile;
 
-        public bool IsRunning => _cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested;
-        
-        /// <summary>
-        /// Profile hiện đang được áp dụng (Game đang chạy). Nếu Null thì đang ở màn hình Native.
-        /// </summary>
+        private IntPtr _hook = IntPtr.Zero;
+        // Giữ tham chiếu delegate sống để GC không thu hồi khi callback đang được Windows dùng.
+        private NativeMethods.WinEventDelegate? _winEventProc;
+
+        private ResolutionModel? _baseline;        // Độ phân giải desktop khi Start()
+        private GameProfile? _activeProfile;        // Profile đang được áp dụng (null = đang ở baseline)
+        private readonly object _gate = new();
+        private int _generation;                    // Dùng để debounce: chỉ lần focus mới nhất mới được áp
+
+        /// <summary>Bỏ qua các lần focus thoáng qua nhanh hơn khoảng này (chống nhấp nháy khi alt-tab).</summary>
+        public TimeSpan DebounceDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
+        public bool IsRunning => _hook != IntPtr.Zero;
         public GameProfile? CurrentActiveProfile => _activeProfile;
 
         public event EventHandler<GameProfile>? ProfileActivated;
         public event EventHandler? ProfileDeactivated;
         public event EventHandler<string>? EngineError;
 
-        /// <summary>
-        /// Chu kỳ quét tiến trình (Mặc định 2 giây).
-        /// </summary>
-        public TimeSpan PollingInterval { get; set; } = TimeSpan.FromSeconds(2);
-
         public AppEngine(IResolutionManager resolutionManager, IProfileManager profileManager)
         {
             _resolutionManager = resolutionManager ?? throw new ArgumentNullException(nameof(resolutionManager));
             _profileManager = profileManager ?? throw new ArgumentNullException(nameof(profileManager));
-            
-            // Khởi tạo luôn dịch vụ Scale để đỡ sửa Program.cs / MainWindow.xaml.cs ban đầu
-            _windowScaler = new WindowScaler();
         }
 
+        /// <summary>
+        /// Phải gọi trên luồng UI (có message pump) để WinEvent hook nhận được callback.
+        /// </summary>
         public void Start()
         {
             if (IsRunning) return;
 
-            _cancellationTokenSource = new CancellationTokenSource();
-            var token = _cancellationTokenSource.Token;
+            try
+            {
+                _baseline = _resolutionManager.GetCurrentResolution();
+            }
+            catch (Exception ex)
+            {
+                EngineError?.Invoke(this, $"Không đọc được độ phân giải hiện tại: {ex.Message}");
+                return;
+            }
 
-            Task.Run(() => MonitoringLoop(token), token);
+            _winEventProc = OnForegroundChanged;
+            _hook = NativeMethods.SetWinEventHook(
+                NativeMethods.EVENT_SYSTEM_FOREGROUND,
+                NativeMethods.EVENT_SYSTEM_FOREGROUND,
+                IntPtr.Zero,
+                _winEventProc,
+                0, 0,
+                NativeMethods.WINEVENT_OUTOFCONTEXT);
+
+            if (_hook == IntPtr.Zero)
+            {
+                _winEventProc = null;
+                EngineError?.Invoke(this, "Không đăng ký được hook theo dõi cửa sổ đang focus.");
+                return;
+            }
+
+            // Áp ngay cho cửa sổ đang focus tại thời điểm bật engine
+            HandleForeground(NativeMethods.GetForegroundWindow());
         }
 
         public void Stop()
         {
-            if (_cancellationTokenSource != null)
+            if (_hook != IntPtr.Zero)
             {
-                _cancellationTokenSource.Cancel();
-                _cancellationTokenSource.Dispose();
-                _cancellationTokenSource = null;
+                NativeMethods.UnhookWinEvent(_hook);
+                _hook = IntPtr.Zero;
             }
+            _winEventProc = null;
 
-            // Fallback an toàn: Khi App Engine tắt (hoặc người dùng đóng Tool), trả về màn hình gốc
-            if (_activeProfile != null)
+            // Vô hiệu mọi lần áp đang chờ debounce
+            Interlocked.Increment(ref _generation);
+
+            lock (_gate)
             {
-                _windowScaler.RestoreWindow(_activeProfile.ProcessName);
-                _activeProfile = null;
-                ProfileDeactivated?.Invoke(this, EventArgs.Empty);
+                if (_activeProfile != null)
+                {
+                    RestoreBaseline();
+                    _activeProfile = null;
+                    ProfileDeactivated?.Invoke(this, EventArgs.Empty);
+                }
             }
         }
 
-        private async Task MonitoringLoop(CancellationToken token)
+        private void OnForegroundChanged(
+            IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+            int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            while (!token.IsCancellationRequested)
+            HandleForeground(hwnd);
+        }
+
+        private void HandleForeground(IntPtr hwnd)
+        {
+            string? processName = GetProcessName(hwnd);
+            int gen = Interlocked.Increment(ref _generation);
+
+            // Chạy ngoài luồng UI để việc đổi độ phân giải (chậm) không làm treo giao diện.
+            Task.Run(async () =>
             {
                 try
                 {
-                    // 1. Chỉ lấy những Profile đang được cho phép (IsEnabled = true)
-                    var enabledProfiles = _profileManager.GetAllProfiles().Where(p => p.IsEnabled).ToList();
-                    
-                    if (enabledProfiles.Any())
+                    await Task.Delay(DebounceDelay).ConfigureAwait(false);
+                    if (gen != Volatile.Read(ref _generation)) return; // đã bị lần focus mới hơn thay thế
+                    Apply(processName);
+                }
+                catch (Exception ex)
+                {
+                    EngineError?.Invoke(this, ex.Message);
+                }
+            });
+        }
+
+        private void Apply(string? processName)
+        {
+            lock (_gate)
+            {
+                if (!IsRunning) return;
+
+                try
+                {
+                    GameProfile? match = processName is null
+                        ? null
+                        : _profileManager.GetAllProfiles().FirstOrDefault(p =>
+                            p.IsEnabled &&
+                            p.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase));
+
+                    if (match != null)
                     {
-                        // 2. Lấy tên của TẤT CẢ các tiến trình đang chạy trền system
-                        var runningProcesses = Process.GetProcesses()
-                                                      .Select(p => p.ProcessName)
-                                                      .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                        // 3. Khớp kiểm tra xem có game nào trong danh sách profile đang chạy không
-                        var matchedProfile = enabledProfiles.FirstOrDefault(p => runningProcesses.Contains(p.ProcessName));
-
-                        // KỊCH BẢN A: Lúc nãy không có game, giờ phát hiện game MỚI CHẠY
-                        if (matchedProfile != null && _activeProfile == null)
+                        // App đang focus có profile -> đổi sang độ phân giải của nó
+                        if (_activeProfile == null || !SameTarget(_activeProfile, match))
                         {
-                            // Đảm bảo lệnh MakeFullScreenBorderless bám lấy Handle cửa sổ thành công mới tính là Active
-                            if (_windowScaler.MakeFullScreenBorderless(matchedProfile.ProcessName))
-                            {
-                                _activeProfile = matchedProfile;
-                                ProfileActivated?.Invoke(this, _activeProfile);
-                            }
+                            EnsureResolution(match.TargetWidth, match.TargetHeight, match.TargetRefreshRate);
+                            _activeProfile = match;
+                            ProfileActivated?.Invoke(this, match);
                         }
-                        // KỊCH BẢN B: Lúc nãy có game, giờ game ĐÃ TẮT
-                        else if (matchedProfile == null && _activeProfile != null)
+                    }
+                    else
+                    {
+                        // App ngoài danh sách (kể cả chính app này) -> trả về baseline
+                        if (_activeProfile != null)
                         {
-                            _windowScaler.RestoreWindow(_activeProfile.ProcessName);
+                            RestoreBaseline();
                             _activeProfile = null;
                             ProfileDeactivated?.Invoke(this, EventArgs.Empty);
                         }
-                        // KỊCH BẢN C: Vừa thoát game này ra chuyển vội sang game kia (Cùng lúc 2 game)
-                        else if (matchedProfile != null && _activeProfile != null && 
-                                !matchedProfile.ProcessName.Equals(_activeProfile.ProcessName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            _windowScaler.RestoreWindow(_activeProfile.ProcessName);
-                            if (_windowScaler.MakeFullScreenBorderless(matchedProfile.ProcessName))
-                            {
-                                _activeProfile = matchedProfile;
-                                ProfileActivated?.Invoke(this, _activeProfile);
-                            }
-                            else
-                            {
-                                _activeProfile = null;
-                            }
-                        }
-                    }
-                    else if (_activeProfile != null)
-                    {
-                        // Trường hợp App đang áp dụng Profile nhưng người dùng tắt tick IsEnabled trên UI
-                        _windowScaler.RestoreWindow(_activeProfile.ProcessName);
-                        _activeProfile = null;
-                        ProfileDeactivated?.Invoke(this, EventArgs.Empty);
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Thông báo lỗi lên UI
                     EngineError?.Invoke(this, ex.Message);
                     Debug.WriteLine($"[AppEngine Error]: {ex.Message}");
                 }
+            }
+        }
 
-                // Chờ cho lần quyét tiếp theo
-                try
-                {
-                    await Task.Delay(PollingInterval, token);
-                }
-                catch (TaskCanceledException)
-                {
-                    break;
-                }
+        /// <summary>Chỉ đổi độ phân giải khi khác với hiện tại, tránh nhấp nháy thừa.</summary>
+        private void EnsureResolution(int width, int height, int? refreshRate)
+        {
+            var current = _resolutionManager.GetCurrentResolution();
+            bool sameSize = current.Width == width && current.Height == height;
+            bool sameRate = !refreshRate.HasValue || current.RefreshRate == refreshRate.Value;
+            if (sameSize && sameRate) return;
+
+            _resolutionManager.ChangeResolution(width, height, refreshRate);
+        }
+
+        private void RestoreBaseline()
+        {
+            if (_baseline != null)
+                EnsureResolution(_baseline.Width, _baseline.Height, _baseline.RefreshRate);
+        }
+
+        private static bool SameTarget(GameProfile a, GameProfile b) =>
+            a.TargetWidth == b.TargetWidth &&
+            a.TargetHeight == b.TargetHeight &&
+            a.TargetRefreshRate == b.TargetRefreshRate;
+
+        private static string? GetProcessName(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return null;
+
+            NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == 0) return null;
+
+            try
+            {
+                using var p = Process.GetProcessById((int)pid);
+                return p.ProcessName;
+            }
+            catch
+            {
+                // Tiến trình đã thoát hoặc không đủ quyền (vd app chạy Admin) -> coi như ngoài danh sách
+                return null;
             }
         }
 

@@ -131,8 +131,17 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- Labels -->
-                        <TextBlock Text="Process Name — or drag an .exe here"
-                                   FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" x:Name="btnPickProcess"
+                                    Content="Tiến trình đang chạy…"
+                                    Click="btnPickProcess_Click"
+                                    Background="#455A64" Foreground="White"
+                                    FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                                    Style="{StaticResource FlatButton}"/>
+                            <TextBlock Text="Process Name — kéo .exe / .lnk vào đây"
+                                       FontFamily="Segoe UI" FontSize="11" Foreground="#757575"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
                         <TextBlock Grid.Column="2" Text="Resolution"
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
                         <TextBlock Grid.Column="4" Text="Refresh Rate"
@@ -141,10 +150,7 @@
                         <!-- Inputs -->
                         <TextBox x:Name="txtProcessName" Grid.Row="2"
                                  AllowDrop="True"
-                                 PreviewDragEnter="txtProcessName_DragOver"
-                                 PreviewDragOver="txtProcessName_DragOver"
-                                 PreviewDrop="txtProcessName_Drop"
-                                 ToolTip="Drag an .exe file here to auto-fill"/>
+                                 ToolTip="Kéo thả file .exe hoặc shortcut .lnk vào đây để tự điền tên tiến trình"/>
                         <ComboBox x:Name="cmbResolution" Grid.Row="2" Grid.Column="2"
                                   SelectionChanged="cmbResolution_SelectionChanged"/>
                         <ComboBox x:Name="cmbRefreshRate" Grid.Row="2" Grid.Column="4"/>
@@ -229,16 +235,20 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <!-- Resolution -->
-                                <DataGridTextColumn Header="Resolution" Binding="{Binding ResolutionDisplay}"
-                                                    Width="110" IsReadOnly="True">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="VerticalAlignment" Value="Center"/>
-                                            <Setter Property="Padding" Value="4,0"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
+                                <!-- Resolution (editable per app) -->
+                                <DataGridTemplateColumn Header="Resolution" Width="130" CanUserSort="False">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox Tag="{Binding ProcessName}"
+                                                      SelectedItem="{Binding SelectedResolution, Mode=TwoWay}"
+                                                      ItemsSource="{Binding ResolutionOptions,
+                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                      SelectionChanged="dgResolution_SelectionChanged"
+                                                      VerticalAlignment="Center" Margin="4,3"
+                                                      FontSize="12"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
                                 <!-- Aspect ratio -->
                                 <DataGridTextColumn Header="Ratio" Binding="{Binding ExpectedAspectRatio}"
