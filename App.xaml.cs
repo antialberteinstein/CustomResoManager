@@ -70,7 +70,7 @@ public partial class App : Application
         try
         {
             _mcpHost?.StopAsync(TimeSpan.FromMilliseconds(500)).GetAwaiter().GetResult();
-            _mcpHost?.Dispose();
+            (_mcpHost as IDisposable)?.Dispose();
         }
         catch { /* best-effort: vẫn thoát dù MCP dừng lỗi */ }
 
