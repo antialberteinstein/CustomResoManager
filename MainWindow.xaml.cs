@@ -286,6 +286,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void txtProcessName_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void txtProcessName_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
+        {
+            var name = System.IO.Path.GetFileNameWithoutExtension(files[0]);
+            txtProcessName.Text = name;
+        }
+    }
+
     private void cmbResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (cmbResolution.SelectedItem is not ResolutionOption selected) return;

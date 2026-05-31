@@ -131,7 +131,7 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- Labels -->
-                        <TextBlock Text="Process Name (no .exe)"
+                        <TextBlock Text="Process Name — or drag an .exe here"
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
                         <TextBlock Grid.Column="2" Text="Resolution"
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
@@ -139,7 +139,11 @@
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
 
                         <!-- Inputs -->
-                        <TextBox x:Name="txtProcessName" Grid.Row="2"/>
+                        <TextBox x:Name="txtProcessName" Grid.Row="2"
+                                 AllowDrop="True"
+                                 DragOver="txtProcessName_DragOver"
+                                 Drop="txtProcessName_Drop"
+                                 ToolTip="Drag an .exe file here to auto-fill"/>
                         <ComboBox x:Name="cmbResolution" Grid.Row="2" Grid.Column="2"
                                   SelectionChanged="cmbResolution_SelectionChanged"/>
                         <ComboBox x:Name="cmbRefreshRate" Grid.Row="2" Grid.Column="4"/>
