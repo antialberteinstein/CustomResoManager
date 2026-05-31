@@ -34,3 +34,33 @@ public sealed record ChangeResultDto(
     [property: JsonPropertyName("applied")] AppliedDto? Applied,
     [property: JsonPropertyName("previous")] CurrentResolutionDto Previous,
     [property: JsonPropertyName("error")] string? Error);
+
+/// <summary>
+/// A saved app→resolution profile, mirroring <c>Models/GameProfile.cs</c> on the wire:
+/// {"processName", "width", "height", "refreshRate" (nullable), "aspectRatio", "enabled"}.
+/// </summary>
+public sealed record ProfileDto(
+    [property: JsonPropertyName("processName")] string ProcessName,
+    [property: JsonPropertyName("width")] int Width,
+    [property: JsonPropertyName("height")] int Height,
+    [property: JsonPropertyName("refreshRate")] int? RefreshRate,
+    [property: JsonPropertyName("aspectRatio")] string AspectRatio,
+    [property: JsonPropertyName("enabled")] bool Enabled);
+
+/// <summary>
+/// Result of a profile mutation (add/remove/enable):
+/// {"success", "profile" (nullable), "error" (nullable)}.
+/// </summary>
+public sealed record ProfileResultDto(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("profile")] ProfileDto? Profile,
+    [property: JsonPropertyName("error")] string? Error);
+
+/// <summary>
+/// State of the focus-tracking engine:
+/// {"running", "activeProfile" (nullable), "error" (nullable)}.
+/// </summary>
+public sealed record EngineStatusDto(
+    [property: JsonPropertyName("running")] bool Running,
+    [property: JsonPropertyName("activeProfile")] ProfileDto? ActiveProfile,
+    [property: JsonPropertyName("error")] string? Error);

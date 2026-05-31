@@ -11,12 +11,20 @@ builder.WebHost.UseUrls("http://127.0.0.1:7777");
 
 // Win32-backed resolution manager + server-side revert state, both singletons.
 builder.Services.AddSingleton<IResolutionManager, ResolutionManager>();
+builder.Services.AddSingleton<IProfileManager>(_ => new ProfileManager());
+builder.Services.AddSingleton<IAppEngine, AppEngine>();
 builder.Services.AddSingleton<ServerState>();
+
+// Standalone console has no UI message pump, so engine focus-tracking is inert here —
+// the DirectUiInvoker just runs inline. Full engine control lives in the WPF app's in-process server.
+builder.Services.AddSingleton<IUiInvoker, DirectUiInvoker>();
 
 builder.Services
     .AddMcpServer()
     .WithHttpTransport()
-    .WithTools<ResolutionTools>();
+    .WithTools<ResolutionTools>()
+    .WithTools<ProfileTools>()
+    .WithTools<EngineTools>();
 
 var app = builder.Build();
 

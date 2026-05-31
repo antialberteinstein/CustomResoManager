@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using CustomResoManager.Core;
 using CustomResoManager.McpServer;
 using Microsoft.AspNetCore.Builder;
@@ -34,7 +35,13 @@ public partial class App : Application
             builder.WebHost.UseUrls("http://127.0.0.1:7777");
 
             builder.Services.AddSingleton<IResolutionManager>(_ => ResolutionManager);
+            builder.Services.AddSingleton<IProfileManager>(_ => ProfileManager);
+            builder.Services.AddSingleton<IAppEngine>(_ => AppEngine);
             builder.Services.AddSingleton<ServerState>();
+
+            // Engine start/stop must run on the WPF UI thread (its WinEvent hook needs a
+            // message pump); MCP tools call from Kestrel threads, so marshal via the dispatcher.
+            builder.Services.AddSingleton<IUiInvoker>(new WpfUiInvoker(Dispatcher));
 
             // Rút ngắn thời gian shutdown để StopAsync không chờ drain các kết nối
             // MCP (SSE long-lived) khi đóng app.
@@ -44,7 +51,9 @@ public partial class App : Application
             builder.Services
                 .AddMcpServer()
                 .WithHttpTransport()
-                .WithTools<ResolutionTools>();
+                .WithTools<ResolutionTools>()
+                .WithTools<ProfileTools>()
+                .WithTools<EngineTools>();
 
             _mcpHost = builder.Build();
             _mcpHost.Services.GetRequiredService<ServerState>();
@@ -71,5 +80,16 @@ public partial class App : Application
         // UI thread do kết nối SSE long-lived) — Environment.Exit hạ toàn bộ luồng nền
         // gồm Kestrel/MCP, bảo đảm không còn server chạy nền sau khi đóng app.
         Environment.Exit(0);
+    }
+
+    /// <summary>
+    /// Runs engine start/stop on the WPF UI thread so AppEngine's WinEvent hook is installed
+    /// on a thread that pumps Windows messages (MCP tools invoke from Kestrel threads).
+    /// </summary>
+    private sealed class WpfUiInvoker : IUiInvoker
+    {
+        private readonly Dispatcher _dispatcher;
+        public WpfUiInvoker(Dispatcher dispatcher) => _dispatcher = dispatcher;
+        public void Invoke(Action action) => _dispatcher.Invoke(action);
     }
 }

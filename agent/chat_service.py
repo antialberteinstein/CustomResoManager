@@ -8,6 +8,19 @@ from typing import Any, Optional
 
 _DEBUG = bool(os.environ.get("CHAT_DEBUG"))
 
+# Tools forwarded straight to the MCP server (profile CRUD + engine control). Resolution
+# tools stay special-cased because they also update local state (_last_listed_resolutions,
+# _previous_resolution) used by the ReAct prompt.
+_PASSTHROUGH_TOOLS = frozenset({
+    "list_profiles",
+    "add_profile",
+    "remove_profile",
+    "set_profile_enabled",
+    "start_engine",
+    "stop_engine",
+    "get_engine_status",
+})
+
 import chromadb
 import requests
 from llama_cpp import Llama
@@ -33,6 +46,13 @@ TOOL có sẵn:
 - get_current_resolution: lấy độ phân giải đang dùng của màn hình. Input: {}.
 - change_resolution: đổi độ phân giải màn hình. Input: {"width": <int>, "height": <int>}.
 - revert_resolution: khôi phục về độ phân giải ngay trước lần đổi gần nhất. Server tự nhớ giá trị cũ nên không cần truyền width/height. Input: {}.
+- list_profiles: liệt kê các profile đã lưu (mỗi profile = 1 app + độ phân giải mục tiêu). Input: {}.
+- add_profile: tạo mới hoặc cập nhật profile cho một app. processName là tên tiến trình KHÔNG có ".exe" (vd "notepad"). refreshRate và enabled là tùy chọn. Input: {"processName": "<str>", "width": <int>, "height": <int>, "refreshRate": <int|null>, "enabled": <bool>}.
+- remove_profile: xoá profile của một app. Input: {"processName": "<str>"}.
+- set_profile_enabled: bật/tắt một profile mà không xoá. Input: {"processName": "<str>", "enabled": <bool>}.
+- start_engine: bật engine tự đổi độ phân giải theo app đang focus. Input: {}.
+- stop_engine: tắt engine và trả màn hình về độ phân giải gốc. Input: {}.
+- get_engine_status: xem engine đang chạy hay không và profile nào đang được áp. Input: {}.
 - search_docs: tra cứu tài liệu hướng dẫn sử dụng phần mềm. Input: {"query": "<câu truy vấn>"}.
 
 QUY TẮC FORMAT (BẮT BUỘC TUÂN THỦ):
@@ -97,11 +117,32 @@ Observation: <nội dung tài liệu>
 Thought: Đã có thông tin, trả lời người dùng.
 Final Answer: <tóm tắt từ tài liệu>
 
+VÍ DỤ 6 — tạo profile cho một app:
+User: khi mở notepad thì để màn hình 1280x720
+Thought: Người dùng muốn tạo profile cho notepad ở 1280x720, mình gọi add_profile.
+Action: add_profile
+Action Input: {"processName": "notepad", "width": 1280, "height": 720}
+Observation: {"success": true, "profile": {"processName": "notepad", "width": 1280, "height": 720, "refreshRate": null, "aspectRatio": "16:9", "enabled": true}}
+Thought: Đã tạo profile, báo cho người dùng.
+Final Answer: Đã tạo profile: khi notepad được focus màn hình sẽ chuyển sang 1280x720. Nhớ bật engine để nó tự áp dụng nhé.
+
+VÍ DỤ 7 — bật engine:
+User: bật engine lên
+Thought: Người dùng muốn bật engine theo dõi focus, mình gọi start_engine.
+Action: start_engine
+Action Input: {}
+Observation: {"running": true, "activeProfile": null}
+Thought: Engine đã chạy, báo cho người dùng.
+Final Answer: Đã bật engine. Từ giờ màn hình sẽ tự đổi độ phân giải theo app đang focus.
+
 LƯU Ý:
 - Chỉ dùng width/height có trong danh sách hỗ trợ.
 - Nếu user nói "số N" hoặc bare number N, tra cứu state "Danh sách gần nhất" để xác định width/height.
 - Nếu user yêu cầu revert/khôi phục/undo/về cũ, gọi revert_resolution với Input {} (server tự biết độ phân giải cũ, không cần width/height).
 - Nếu state "Danh sách gần nhất" rỗng mà user chọn theo số, gọi list_resolutions trước.
+- processName luôn là tên tiến trình KHÔNG kèm ".exe" (vd "valorant", "notepad"). Nếu user đưa tên có ".exe" hay đường dẫn, lấy phần tên file không đuôi.
+- Phân biệt: change_resolution đổi NGAY độ phân giải hiện tại; add_profile chỉ lưu cấu hình để engine áp khi app đó được focus. "Đổi luôn" -> change_resolution; "khi mở app X thì..." -> add_profile.
+- Sau khi tạo/sửa profile, nếu engine chưa chạy có thể nhắc user bật engine (start_engine) để áp dụng.
 - Nếu observation báo lỗi (ERROR / success=false), đưa Final Answer giải thích lịch sự cho người dùng."""
 
 
@@ -306,6 +347,20 @@ class ChatService:
                     self._previous_resolution = prev
             return json.dumps(result or {}, ensure_ascii=False)
 
+        # Profile & engine tools: thin pass-through to the MCP server. The server validates
+        # inputs and returns a JSON result the LLM reads in the next Observation.
+        if action in _PASSTHROUGH_TOOLS:
+            if self._tooling is None:
+                return "ERROR: tooling không khả dụng."
+            tool_args = self._passthrough_args(action, args)
+            if isinstance(tool_args, str):  # validation error message
+                return tool_args
+            try:
+                result = await self._tooling.call_tool(action, tool_args)
+            except MCPUnavailableError:
+                return "ERROR: MCP server không kết nối được. Hãy thông báo cho người dùng và gợi ý thử lại sau."
+            return json.dumps(result or {}, ensure_ascii=False)
+
         if action == "search_docs":
             query = args.get("query") or ""
             if not query.strip():
@@ -313,6 +368,49 @@ class ChatService:
             return await self._search_docs(query)
 
         return f"ERROR: tool '{action}' không tồn tại."
+
+    def _passthrough_args(self, action: str, args: dict) -> Any:
+        """Coerce/validate args for profile & engine tools. Returns a dict to send, or an
+        ERROR string the LLM should surface to the user."""
+        if action in ("list_profiles", "start_engine", "stop_engine", "get_engine_status"):
+            return {}
+
+        if action == "add_profile":
+            name = str(args.get("processName") or "").strip()
+            if not name:
+                return "ERROR: thiếu processName (tên tiến trình)."
+            try:
+                payload: dict[str, Any] = {
+                    "processName": name,
+                    "width": int(args["width"]),
+                    "height": int(args["height"]),
+                }
+            except (KeyError, TypeError, ValueError):
+                return "ERROR: add_profile cần processName, width, height hợp lệ."
+            if args.get("refreshRate") not in (None, ""):
+                try:
+                    payload["refreshRate"] = int(args["refreshRate"])
+                except (TypeError, ValueError):
+                    return "ERROR: refreshRate phải là số nguyên."
+            if "enabled" in args and args["enabled"] is not None:
+                payload["enabled"] = bool(args["enabled"])
+            return payload
+
+        if action == "remove_profile":
+            name = str(args.get("processName") or "").strip()
+            if not name:
+                return "ERROR: thiếu processName (tên tiến trình)."
+            return {"processName": name}
+
+        if action == "set_profile_enabled":
+            name = str(args.get("processName") or "").strip()
+            if not name:
+                return "ERROR: thiếu processName (tên tiến trình)."
+            if args.get("enabled") is None:
+                return "ERROR: set_profile_enabled cần enabled (true/false)."
+            return {"processName": name, "enabled": bool(args["enabled"])}
+
+        return {}
 
     async def _search_docs(self, query: str) -> str:
         if self._embeddings is None or self._collection is None:

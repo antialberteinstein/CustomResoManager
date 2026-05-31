@@ -21,8 +21,12 @@
       instead of referencing the WinExe/WPF project.
     -->
     <Compile Include="..\Models\DisplaySettingModel.cs" Link="Linked\DisplaySettingModel.cs" />
+    <Compile Include="..\Models\GameProfile.cs" Link="Linked\GameProfile.cs" />
     <Compile Include="..\Core\NativeMethods.cs" Link="Linked\NativeMethods.cs" />
     <Compile Include="..\Core\ResolutionManager.cs" Link="Linked\ResolutionManager.cs" />
+    <Compile Include="..\Core\AspectRatioCalculator.cs" Link="Linked\AspectRatioCalculator.cs" />
+    <Compile Include="..\Core\ProfileManager.cs" Link="Linked\ProfileManager.cs" />
+    <Compile Include="..\Core\AppEngine.cs" Link="Linked\AppEngine.cs" />
   </ItemGroup>
 
 </Project>
