@@ -1,10 +1,12 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CustomResoManager.Core;
@@ -12,147 +14,305 @@ using CustomResoManager.Models;
 
 namespace CustomResoManager;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
 public partial class MainWindow : Window
 {
     private readonly IResolutionManager _resolutionManager;
     private readonly IProfileManager _profileManager;
     private readonly IAppEngine _appEngine;
-    private readonly HttpClient _chatClient = new HttpClient();
+    private readonly HttpClient _chatClient = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private List<ResolutionModel> _cachedResolutions = [];
     private const string ChatEndpoint = "http://127.0.0.1:8000/chat";
+
+    // ── Display model for DataGrid ────────────────────────────────────────────
+
+    public sealed class ProfileDisplayItem
+    {
+        public string ProcessName { get; set; } = string.Empty;
+        public bool IsEnabled { get; set; }
+        public int TargetWidth { get; set; }
+        public int TargetHeight { get; set; }
+        public int? TargetRefreshRate { get; set; }
+        public string ExpectedAspectRatio { get; set; } = string.Empty;
+
+        public string ResolutionDisplay => $"{TargetWidth}×{TargetHeight}";
+        public string RefreshRateDisplay => TargetRefreshRate.HasValue ? $"{TargetRefreshRate}" : "—";
+
+        public static ProfileDisplayItem From(GameProfile p) => new()
+        {
+            ProcessName = p.ProcessName,
+            IsEnabled = p.IsEnabled,
+            TargetWidth = p.TargetWidth,
+            TargetHeight = p.TargetHeight,
+            TargetRefreshRate = p.TargetRefreshRate,
+            ExpectedAspectRatio = p.ExpectedAspectRatio
+        };
+    }
+
+    private record ResolutionOption(int Width, int Height)
+    {
+        public override string ToString() => $"{Width} × {Height}";
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
 
     public MainWindow()
     {
         InitializeComponent();
 
-        _chatClient.Timeout = TimeSpan.FromMinutes(5);
-
-        // 1. Khởi tạo Backend Services (Thay vì dùng framework DI phức tạp lúc test)
         _resolutionManager = new ResolutionManager();
         _profileManager = new ProfileManager();
         _appEngine = new AppEngine(_resolutionManager, _profileManager);
 
-        // 2. Lắng nghe thông báo từ Backend (Do Engine chạy ngầm luồng Thread khác nên phải gọi qua Dispatcher)
-        _appEngine.ProfileActivated += (s, profile) =>
-        {
-            Dispatcher.Invoke(() =>
-            {
-                txtStatus.Text = $"Status: [ON] Res changed to {profile.TargetWidth}x{profile.TargetHeight} for '{profile.ProcessName}'";
-                txtStatus.Foreground = Brushes.Green;
-            });
-        };
+        _appEngine.ProfileActivated += OnProfileActivated;
+        _appEngine.ProfileDeactivated += OnProfileDeactivated;
+        _appEngine.EngineError += OnEngineError;
 
-        _appEngine.ProfileDeactivated += (s, e) =>
-        {
-            Dispatcher.Invoke(() =>
-            {
-                txtStatus.Text = "Status: [IDLE] Restored to Native Resolution";
-                txtStatus.Foreground = Brushes.Gray;
-            });
-        };
-
-        _appEngine.EngineError += (s, errMsg) =>
-        {
-            Dispatcher.Invoke(() =>
-            {
-                txtStatus.Text = $"Status: [ERROR] {errMsg}";
-                txtStatus.Foreground = Brushes.Red;
-            });
-        };
-
-        // Hiện ds config ban đầu
-        UpdateProfilesList();
-        ShowSupportedResolutions();
+        RefreshProfileList();
+        LoadResolutionOptions();
+        RefreshCurrentResolution();
+        _ = CheckChatConnectionAsync();
     }
 
-    private void ShowSupportedResolutions()
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    private void RefreshProfileList()
+    {
+        dgProfiles.ItemsSource = _profileManager.GetAllProfiles()
+            .Select(ProfileDisplayItem.From)
+            .ToList();
+    }
+
+    private void LoadResolutionOptions()
     {
         try
         {
-            var resList = _resolutionManager.GetSupportedResolutions();
-            // Lọc ra một số độ phân giải phổ biến để hiển thị nhỏ gọn
-            var popularRes = resList.Where(r => r.Width >= 800)
-                                    .Select(r => $"{r.Width}x{r.Height}")
-                                    .Distinct()
-                                    .Take(5)
-                                    .ToList();
-            
-            txtProfiles.Text += "\n\nAvailable (Top 5):\n" + string.Join(", ", popularRes);
+            _cachedResolutions = _resolutionManager.GetSupportedResolutions()
+                .Where(r => r.Width >= 640)
+                .OrderByDescending(r => r.Width)
+                .ThenByDescending(r => r.Height)
+                .ToList();
+
+            var options = _cachedResolutions
+                .GroupBy(r => (r.Width, r.Height))
+                .Select(g => new ResolutionOption(g.Key.Width, g.Key.Height))
+                .ToList();
+
+            cmbResolution.ItemsSource = options;
+            if (options.Count > 0) cmbResolution.SelectedIndex = 0;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not load display resolutions: {ex.Message}",
+                "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
-    private void btnAddProfile_Click(object sender, RoutedEventArgs e)
+    private void RefreshCurrentResolution()
     {
-        if (int.TryParse(txtWidth.Text, out int w) && int.TryParse(txtHeight.Text, out int h))
+        try
         {
-            string process = txtProcessName.Text.Trim().Replace(".exe", "");
-            
-            var profile = new GameProfile
-            {
-                ProcessName = process,
-                TargetWidth = w,
-                TargetHeight = h,
-                ExpectedAspectRatio = AspectRatioCalculator.CalculateAspectRatio(w, h),
-                IsEnabled = true
-            };
-            
-            _profileManager.AddOrUpdateProfile(profile);
-            MessageBox.Show("Saved config to JSON!", "Success");
-            UpdateProfilesList();
+            var res = _resolutionManager.GetCurrentResolution();
+            txtCurrentRes.Text = $"{res.Width}×{res.Height} @ {res.RefreshRate}Hz";
         }
-        else
+        catch
         {
-            MessageBox.Show("Width / Height must be integer.", "Error");
+            txtCurrentRes.Text = "—";
         }
     }
+
+    private async Task CheckChatConnectionAsync()
+    {
+        try
+        {
+            using var ping = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            var resp = await ping.GetAsync("http://127.0.0.1:8000/health");
+            SetChatStatus(resp.IsSuccessStatusCode);
+        }
+        catch
+        {
+            SetChatStatus(false);
+        }
+    }
+
+    private void SetChatStatus(bool connected)
+    {
+        chatStatusDot.Background = connected
+            ? new SolidColorBrush(Color.FromRgb(46, 125, 50))
+            : new SolidColorBrush(Color.FromRgb(158, 158, 158));
+        txtChatStatus.Text = connected
+            ? "Connected — http://127.0.0.1:8000"
+            : "Disconnected — start the Python agent";
+        txtChatStatus.Foreground = connected
+            ? new SolidColorBrush(Color.FromRgb(46, 125, 50))
+            : new SolidColorBrush(Color.FromRgb(158, 158, 158));
+    }
+
+    private void SetEngineStatus(bool running, string statusText)
+    {
+        statusDot.Background = running
+            ? new SolidColorBrush(Color.FromRgb(76, 175, 80))
+            : new SolidColorBrush(Color.FromRgb(96, 125, 139));
+
+        txtStatus.Text = statusText;
+        txtStatus.Foreground = running
+            ? new SolidColorBrush(Color.FromRgb(128, 203, 196))
+            : new SolidColorBrush(Color.FromRgb(144, 164, 174));
+
+        btnToggleEngine.Content = running ? "⏹  Stop Engine" : "▶  Start Engine";
+        btnToggleEngine.Background = running
+            ? new SolidColorBrush(Color.FromRgb(183, 28, 28))
+            : new SolidColorBrush(Color.FromRgb(46, 125, 50));
+    }
+
+    // ── Engine events ─────────────────────────────────────────────────────────
+
+    private void OnProfileActivated(object? sender, GameProfile profile)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            SetEngineStatus(true, $"Active: {profile.ProcessName} → {profile.TargetWidth}×{profile.TargetHeight}");
+            activeProfileBanner.Visibility = Visibility.Visible;
+            txtActiveProfile.Text = $"Profile active: {profile.ProcessName}  ({profile.TargetWidth}×{profile.TargetHeight})";
+            RefreshCurrentResolution();
+        });
+    }
+
+    private void OnProfileDeactivated(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            SetEngineStatus(true, "Engine Running — watching for games...");
+            activeProfileBanner.Visibility = Visibility.Collapsed;
+            RefreshCurrentResolution();
+        });
+    }
+
+    private void OnEngineError(object? sender, string errMsg)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            statusDot.Background = new SolidColorBrush(Colors.OrangeRed);
+            txtStatus.Text = $"Error: {errMsg}";
+            txtStatus.Foreground = new SolidColorBrush(Colors.OrangeRed);
+        });
+    }
+
+    // ── Button handlers ───────────────────────────────────────────────────────
 
     private void btnToggleEngine_Click(object sender, RoutedEventArgs e)
     {
         if (_appEngine.IsRunning)
         {
             _appEngine.Stop();
-            btnToggleEngine.Content = "Start Engine";
-            txtStatus.Text = "Status: Engine Stopped";
-            txtStatus.Foreground = Brushes.Red;
+            SetEngineStatus(false, "Engine Stopped");
+            activeProfileBanner.Visibility = Visibility.Collapsed;
+            RefreshCurrentResolution();
         }
         else
         {
             _appEngine.Start();
-            btnToggleEngine.Content = "Stop Engine";
-            txtStatus.Text = "Status: Engine Running (Waiting for target app...)";
-            txtStatus.Foreground = Brushes.Blue;
+            SetEngineStatus(true, "Engine Running — watching for games...");
         }
     }
 
-    private void UpdateProfilesList()
+    private void btnSaveProfile_Click(object sender, RoutedEventArgs e)
     {
-        var profiles = _profileManager.GetAllProfiles();
-        if (profiles.Any())
+        string processName = txtProcessName.Text.Trim()
+            .Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(processName))
         {
-            var text = "Saved Profiles:\n" + string.Join("\n", profiles.Select(p => $"- {p.ProcessName}: {p.TargetWidth}x{p.TargetHeight} ({p.ExpectedAspectRatio})"));
-            txtProfiles.Text = text;
+            MessageBox.Show("Please enter a process name.", "Validation",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
         }
-        else
+
+        if (cmbResolution.SelectedItem is not ResolutionOption res)
         {
-            txtProfiles.Text = "Saved Profiles: None";
+            MessageBox.Show("Please select a resolution.", "Validation",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        int? refreshRate = null;
+        if (cmbRefreshRate.SelectedItem is string rateStr
+            && rateStr != "Default"
+            && int.TryParse(rateStr.Replace(" Hz", ""), out int parsedRate))
+        {
+            refreshRate = parsedRate;
+        }
+
+        var profile = new GameProfile
+        {
+            ProcessName = processName,
+            TargetWidth = res.Width,
+            TargetHeight = res.Height,
+            TargetRefreshRate = refreshRate,
+            ExpectedAspectRatio = AspectRatioCalculator.CalculateAspectRatio(res.Width, res.Height),
+            IsEnabled = true
+        };
+
+        _profileManager.AddOrUpdateProfile(profile);
+        RefreshProfileList();
+        txtProcessName.Text = string.Empty;
+    }
+
+    private void btnDeleteProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string processName })
+        {
+            var confirm = MessageBox.Show(
+                $"Delete profile for '{processName}'?",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm == MessageBoxResult.Yes)
+            {
+                _profileManager.RemoveProfile(processName);
+                RefreshProfileList();
+            }
         }
     }
+
+    private void chkEnabled_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox { DataContext: ProfileDisplayItem item } chk)
+        {
+            var profile = _profileManager.GetProfile(item.ProcessName);
+            if (profile is null) return;
+            profile.IsEnabled = chk.IsChecked == true;
+            _profileManager.SaveChanges();
+        }
+    }
+
+    private void cmbResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (cmbResolution.SelectedItem is not ResolutionOption selected) return;
+
+        var rates = _cachedResolutions
+            .Where(r => r.Width == selected.Width && r.Height == selected.Height)
+            .Select(r => r.RefreshRate)
+            .Distinct()
+            .OrderByDescending(r => r)
+            .Select(r => $"{r} Hz")
+            .ToList();
+
+        rates.Insert(0, "Default");
+        cmbRefreshRate.ItemsSource = rates;
+        cmbRefreshRate.SelectedIndex = 0;
+    }
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
 
     private async void btnSendChat_Click(object sender, RoutedEventArgs e)
     {
         var userText = txtChatInput.Text.Trim();
-        if (string.IsNullOrWhiteSpace(userText))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(userText)) return;
 
-        AppendChatLine($"You: {userText}");
-        AppendChatLine("Bot: Dang suy nghi...");
+        AppendChat($"You: {userText}");
+        AppendChat("Bot: Đang suy nghĩ...");
         txtChatInput.Text = string.Empty;
-
         btnSendChat.IsEnabled = false;
 
         try
@@ -164,11 +324,15 @@ public partial class MainWindow : Window
 
             var body = await response.Content.ReadAsStringAsync();
             var reply = JsonDocument.Parse(body).RootElement.GetProperty("reply").GetString() ?? string.Empty;
-            ReplaceLastChatLine($"Bot: {reply}");
+            ReplaceLastChat($"Bot: {reply}");
+
+            RefreshCurrentResolution();
+            SetChatStatus(true);
         }
         catch (Exception ex)
         {
-            ReplaceLastChatLine($"Bot: [error] {ex.Message}");
+            ReplaceLastChat($"Bot: [lỗi] {ex.Message}");
+            SetChatStatus(false);
         }
         finally
         {
@@ -176,50 +340,29 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AppendChatLine(string line)
-    {
-        if (string.IsNullOrEmpty(txtChatLog.Text))
-        {
-            txtChatLog.Text = line;
-        }
-        else
-        {
-            txtChatLog.Text += Environment.NewLine + line;
-        }
-
-        txtChatLog.CaretIndex = txtChatLog.Text.Length;
-        txtChatLog.ScrollToEnd();
-    }
-
-    private void ReplaceLastChatLine(string line)
-    {
-        var lines = txtChatLog.Text.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
-        if (lines.Length == 0)
-        {
-            txtChatLog.Text = line;
-        }
-        else
-        {
-            lines[lines.Length - 1] = line;
-            txtChatLog.Text = string.Join(Environment.NewLine, lines);
-        }
-
-        txtChatLog.CaretIndex = txtChatLog.Text.Length;
-        txtChatLog.ScrollToEnd();
-    }
-
     private void txtChatInput_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            btnSendChat_Click(sender, e);
-        }
+        if (e.Key == Key.Enter) { e.Handled = true; btnSendChat_Click(sender, e); }
     }
 
-    protected override void OnClosed(System.EventArgs e)
+    private void AppendChat(string line)
     {
-        // Rất Quen Trọng: Khôi phục màn hình khi thoát Test GUI
+        txtChatLog.Text = string.IsNullOrEmpty(txtChatLog.Text)
+            ? line
+            : txtChatLog.Text + Environment.NewLine + line;
+        txtChatLog.ScrollToEnd();
+    }
+
+    private void ReplaceLastChat(string line)
+    {
+        var lines = txtChatLog.Text.Split(Environment.NewLine);
+        lines[^1] = line;
+        txtChatLog.Text = string.Join(Environment.NewLine, lines);
+        txtChatLog.ScrollToEnd();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
         _appEngine.Stop();
         _chatClient.Dispose();
         base.OnClosed(e);
