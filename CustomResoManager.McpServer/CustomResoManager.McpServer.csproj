@@ -10,11 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!--
-      Official C# MCP SDK (ASP.NET Core integration, Streamable HTTP transport).
-      The package is in preview; if this exact version fails to restore, run:
-          dotnet add package ModelContextProtocol.AspNetCore --prerelease
-    -->
+    <!-- Official C# MCP SDK: ModelContextProtocol.AspNetCore (ASP.NET Core + Streamable HTTP) -->
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.3" />
   </ItemGroup>
 
