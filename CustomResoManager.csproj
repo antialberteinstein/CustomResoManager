@@ -10,4 +10,11 @@
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="CustomResoManager.McpServer\**" />
+    <None Remove="CustomResoManager.McpServer\**" />
+    <EmbeddedResource Remove="CustomResoManager.McpServer\**" />
+    <Page Remove="CustomResoManager.McpServer\**" />
+  </ItemGroup>
+
 </Project>
