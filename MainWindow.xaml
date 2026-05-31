@@ -117,6 +117,8 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="4"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
@@ -130,42 +132,43 @@
                             <ColumnDefinition Width="75"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Labels -->
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" x:Name="btnPickProcess"
-                                    Content="Tiến trình đang chạy…"
-                                    Click="btnPickProcess_Click"
-                                    Background="#455A64" Foreground="White"
-                                    FontSize="11" Padding="8,2" Margin="8,0,0,0"
-                                    Style="{StaticResource FlatButton}"/>
-                            <Button DockPanel.Dock="Right" x:Name="btnAllApps"
-                                    Content="Tất cả app trên máy…"
-                                    Click="btnAllApps_Click"
-                                    Background="#455A64" Foreground="White"
-                                    FontSize="11" Padding="8,2" Margin="8,0,0,0"
-                                    Style="{StaticResource FlatButton}"/>
-                            <Button DockPanel.Dock="Right" x:Name="btnBrowseFile"
-                                    Content="Chọn file…"
+                        <!-- Button bar: nguồn thêm app (full width, tự xuống dòng nếu hẹp) -->
+                        <WrapPanel Grid.Row="0" Grid.ColumnSpan="7" Orientation="Horizontal">
+                            <TextBlock Text="Thêm app từ:" VerticalAlignment="Center"
+                                       FontFamily="Segoe UI" FontSize="11" Foreground="#757575"
+                                       Margin="0,0,8,4"/>
+                            <Button x:Name="btnBrowseFile" Content="Chọn file (.exe/.lnk)…"
                                     Click="btnBrowseFile_Click"
                                     Background="#455A64" Foreground="White"
-                                    FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                                    FontSize="11" Padding="10,4" Margin="0,0,8,4"
                                     Style="{StaticResource FlatButton}"/>
-                            <TextBlock Text="Tên tiến trình:"
-                                       FontFamily="Segoe UI" FontSize="11" Foreground="#757575"
-                                       VerticalAlignment="Center"/>
-                        </DockPanel>
-                        <TextBlock Grid.Column="2" Text="Resolution"
+                            <Button x:Name="btnAllApps" Content="Tất cả app trên máy…"
+                                    Click="btnAllApps_Click"
+                                    Background="#455A64" Foreground="White"
+                                    FontSize="11" Padding="10,4" Margin="0,0,8,4"
+                                    Style="{StaticResource FlatButton}"/>
+                            <Button x:Name="btnPickProcess" Content="Tiến trình đang chạy…"
+                                    Click="btnPickProcess_Click"
+                                    Background="#455A64" Foreground="White"
+                                    FontSize="11" Padding="10,4" Margin="0,0,8,4"
+                                    Style="{StaticResource FlatButton}"/>
+                        </WrapPanel>
+
+                        <!-- Labels -->
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Tên tiến trình:"
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
-                        <TextBlock Grid.Column="4" Text="Refresh Rate"
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="Resolution"
+                                   FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
+                        <TextBlock Grid.Row="2" Grid.Column="4" Text="Refresh Rate"
                                    FontFamily="Segoe UI" FontSize="11" Foreground="#757575"/>
 
                         <!-- Inputs -->
-                        <TextBox x:Name="txtProcessName" Grid.Row="2"
-                                 ToolTip="Nhập tên tiến trình, hoặc dùng nút Chọn file… / Tiến trình đang chạy…"/>
-                        <ComboBox x:Name="cmbResolution" Grid.Row="2" Grid.Column="2"
+                        <TextBox x:Name="txtProcessName" Grid.Row="4" Grid.Column="0"
+                                 ToolTip="Nhập tên tiến trình, hoặc dùng các nút Thêm app ở trên"/>
+                        <ComboBox x:Name="cmbResolution" Grid.Row="4" Grid.Column="2"
                                   SelectionChanged="cmbResolution_SelectionChanged"/>
-                        <ComboBox x:Name="cmbRefreshRate" Grid.Row="2" Grid.Column="4"/>
-                        <Button Grid.Row="2" Grid.Column="6"
+                        <ComboBox x:Name="cmbRefreshRate" Grid.Row="4" Grid.Column="4"/>
+                        <Button Grid.Row="4" Grid.Column="6"
                                 Content="Save" Click="btnSaveProfile_Click"
                                 Background="#1565C0" Foreground="White"
                                 FontWeight="SemiBold" Padding="0,7"
