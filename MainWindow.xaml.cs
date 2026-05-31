@@ -66,25 +66,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        txtProcessName.AddHandler(UIElement.DragOverEvent, new DragEventHandler((s, e) =>
-        {
-            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
-                ? DragDropEffects.Copy
-                : DragDropEffects.None;
-            e.Handled = true;
-        }), handledEventsToo: true);
-
-        txtProcessName.AddHandler(UIElement.DropEvent, new DragEventHandler((s, e) =>
-        {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
-            {
-                string? name = ResolveDroppedFileToProcessName(files[0]);
-                if (!string.IsNullOrWhiteSpace(name))
-                    txtProcessName.Text = name;
-            }
-            e.Handled = true;
-        }), handledEventsToo: true);
-
         _resolutionManager = App.ResolutionManager;
         _profileManager = App.ProfileManager;
         _appEngine = App.AppEngine;
@@ -102,10 +83,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Trả tên tiến trình (không đuôi) từ file được kéo vào. Hỗ trợ .exe và shortcut .lnk
+    /// Trả tên tiến trình (không đuôi) từ đường dẫn file được chọn. Hỗ trợ .exe và shortcut .lnk
     /// (resolve target qua WScript.Shell COM, late-binding để không cần thêm COM reference).
     /// </summary>
-    private static string? ResolveDroppedFileToProcessName(string path)
+    private static string? ResolveFileToProcessName(string path)
     {
         try
         {
@@ -354,6 +335,22 @@ public partial class MainWindow : Window
         {
             txtProcessName.Text = picker.SelectedProcessName;
         }
+    }
+
+    private void btnBrowseFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Chọn file game (.exe) hoặc shortcut (.lnk)",
+            Filter = "Ứng dụng & shortcut (*.exe;*.lnk)|*.exe;*.lnk|Tất cả file (*.*)|*.*",
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog(this) != true) return;
+
+        string? name = ResolveFileToProcessName(dialog.FileName);
+        if (!string.IsNullOrWhiteSpace(name))
+            txtProcessName.Text = name;
     }
 
     private void dgResolution_SelectionChanged(object sender, SelectionChangedEventArgs e)

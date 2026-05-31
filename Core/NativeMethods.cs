@@ -11,6 +11,8 @@ namespace CustomResoManager.Core
 
         public const int CDS_UPDATEREGISTRY = 0x01;
         public const int CDS_TEST = 0x02;
+        // Đổi mode dạng tạm thời (game hay dùng): không ghi registry, Windows tự revert khi tiến trình thoát.
+        public const int CDS_FULLSCREEN = 0x04;
 
         public const int DISP_CHANGE_SUCCESSFUL = 0;
         public const int DISP_CHANGE_RESTART = 1;

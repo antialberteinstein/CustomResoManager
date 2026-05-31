@@ -38,9 +38,13 @@ namespace CustomResoManager.Core
         private GameProfile? _activeProfile;        // Profile đang được áp dụng (null = đang ở baseline)
         private readonly object _gate = new();
         private int _generation;                    // Dùng để debounce: chỉ lần focus mới nhất mới được áp
+        private long _lastChangeTicks;              // Thời điểm lần ĐỔI MODE thật gần nhất (UTC ticks)
 
         /// <summary>Bỏ qua các lần focus thoáng qua nhanh hơn khoảng này (chống nhấp nháy khi alt-tab).</summary>
-        public TimeSpan DebounceDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+        public TimeSpan DebounceDelay { get; set; } = TimeSpan.FromMilliseconds(300);
+
+        /// <summary>Khoảng cách tối thiểu giữa 2 lần đổi mode thật (cooldown). Lần đổi sẽ bị HOÃN, không bị bỏ.</summary>
+        public TimeSpan MinChangeInterval { get; set; } = TimeSpan.FromMilliseconds(500);
 
         public bool IsRunning => _hook != IntPtr.Zero;
         public GameProfile? CurrentActiveProfile => _activeProfile;
@@ -139,6 +143,17 @@ namespace CustomResoManager.Core
                 {
                     await Task.Delay(DebounceDelay).ConfigureAwait(false);
                     if (gen != Volatile.Read(ref _generation)) return; // đã bị lần focus mới hơn thay thế
+
+                    // Cooldown: giữ khoảng cách tối thiểu giữa 2 lần đổi mode thật.
+                    // Nếu chưa đủ giãn cách thì HOÃN (chờ phần còn lại) chứ không bỏ qua,
+                    // đảm bảo trạng thái cuối cùng vẫn đúng với app đang focus.
+                    var sinceLast = DateTime.UtcNow - new DateTime(Volatile.Read(ref _lastChangeTicks), DateTimeKind.Utc);
+                    if (sinceLast < MinChangeInterval)
+                    {
+                        await Task.Delay(MinChangeInterval - sinceLast).ConfigureAwait(false);
+                        if (gen != Volatile.Read(ref _generation)) return; // bị focus mới hơn thay thế trong lúc chờ
+                    }
+
                     Apply(processName);
                 }
                 catch (Exception ex)
@@ -200,6 +215,7 @@ namespace CustomResoManager.Core
             if (sameSize && sameRate) return;
 
             _resolutionManager.ChangeResolution(width, height, refreshRate);
+            Volatile.Write(ref _lastChangeTicks, DateTime.UtcNow.Ticks); // mốc cho cooldown
         }
 
         private void RestoreBaseline()

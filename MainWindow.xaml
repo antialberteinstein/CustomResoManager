@@ -138,7 +138,13 @@
                                     Background="#455A64" Foreground="White"
                                     FontSize="11" Padding="8,2" Margin="8,0,0,0"
                                     Style="{StaticResource FlatButton}"/>
-                            <TextBlock Text="Process Name — kéo .exe / .lnk vào đây"
+                            <Button DockPanel.Dock="Right" x:Name="btnBrowseFile"
+                                    Content="Chọn file…"
+                                    Click="btnBrowseFile_Click"
+                                    Background="#455A64" Foreground="White"
+                                    FontSize="11" Padding="8,2" Margin="8,0,0,0"
+                                    Style="{StaticResource FlatButton}"/>
+                            <TextBlock Text="Process Name — nhập tên, chọn file .exe/.lnk, hoặc chọn tiến trình đang chạy"
                                        FontFamily="Segoe UI" FontSize="11" Foreground="#757575"
                                        VerticalAlignment="Center"/>
                         </DockPanel>
@@ -149,8 +155,7 @@
 
                         <!-- Inputs -->
                         <TextBox x:Name="txtProcessName" Grid.Row="2"
-                                 AllowDrop="True"
-                                 ToolTip="Kéo thả file .exe hoặc shortcut .lnk vào đây để tự điền tên tiến trình"/>
+                                 ToolTip="Nhập tên tiến trình, hoặc dùng nút Chọn file… / Tiến trình đang chạy…"/>
                         <ComboBox x:Name="cmbResolution" Grid.Row="2" Grid.Column="2"
                                   SelectionChanged="cmbResolution_SelectionChanged"/>
                         <ComboBox x:Name="cmbRefreshRate" Grid.Row="2" Grid.Column="4"/>

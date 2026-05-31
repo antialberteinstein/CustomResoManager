@@ -126,8 +126,9 @@ namespace CustomResoManager.Core
                     devMode.dmFields |= NativeMethods.DM_DISPLAYFREQUENCY;
                 }
 
-                // Attempt to change resolution temporarily
-                int result = NativeMethods.ChangeDisplaySettings(ref devMode, 0); // No CDS_UPDATEREGISTRY flag so it doesn't persist across reboots
+                // CDS_FULLSCREEN: đổi mode dạng tạm thời — không ghi registry (không persist qua reboot),
+                // ít overhead hơn và Windows tự revert khi tiến trình thoát (thêm một lớp an toàn).
+                int result = NativeMethods.ChangeDisplaySettings(ref devMode, NativeMethods.CDS_FULLSCREEN);
 
                 if (result == NativeMethods.DISP_CHANGE_SUCCESSFUL)
                 {
