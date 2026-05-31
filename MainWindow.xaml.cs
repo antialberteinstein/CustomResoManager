@@ -59,9 +59,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _resolutionManager = new ResolutionManager();
-        _profileManager = new ProfileManager();
-        _appEngine = new AppEngine(_resolutionManager, _profileManager);
+        _resolutionManager = App.ResolutionManager;
+        _profileManager = App.ProfileManager;
+        _appEngine = App.AppEngine;
 
         _appEngine.ProfileActivated += OnProfileActivated;
         _appEngine.ProfileDeactivated += OnProfileDeactivated;

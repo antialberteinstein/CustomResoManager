@@ -11,10 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="CustomResoManager.McpServer\**" />
-    <None Remove="CustomResoManager.McpServer\**" />
-    <EmbeddedResource Remove="CustomResoManager.McpServer\**" />
-    <Page Remove="CustomResoManager.McpServer\**" />
+    <!-- Exclude only Program.cs — the other McpServer files are compiled into this project -->
+    <Compile Remove="CustomResoManager.McpServer\Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="*-*" />
   </ItemGroup>
 
 </Project>
