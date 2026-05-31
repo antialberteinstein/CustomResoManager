@@ -18,6 +18,10 @@ namespace CustomResoManager.Core
         event EventHandler<GameProfile>? ProfileActivated;
         event EventHandler? ProfileDeactivated;
         event EventHandler<string>? EngineError;
+
+        // Báo khi engine bật/tắt — kể cả khi do MCP/agent điều khiển — để UI tự cập nhật nút & banner.
+        event EventHandler? Started;
+        event EventHandler? Stopped;
     }
 
     /// <summary>
@@ -52,6 +56,8 @@ namespace CustomResoManager.Core
         public event EventHandler<GameProfile>? ProfileActivated;
         public event EventHandler? ProfileDeactivated;
         public event EventHandler<string>? EngineError;
+        public event EventHandler? Started;
+        public event EventHandler? Stopped;
 
         public AppEngine(IResolutionManager resolutionManager, IProfileManager profileManager)
         {
@@ -94,6 +100,8 @@ namespace CustomResoManager.Core
 
             // Áp ngay cho cửa sổ đang focus tại thời điểm bật engine
             HandleForeground(NativeMethods.GetForegroundWindow());
+
+            Started?.Invoke(this, EventArgs.Empty);
         }
 
         public void Stop()
@@ -122,6 +130,9 @@ namespace CustomResoManager.Core
                 if (hadActive)
                     ProfileDeactivated?.Invoke(this, EventArgs.Empty);
             }
+
+            if (wasRunning)
+                Stopped?.Invoke(this, EventArgs.Empty);
         }
 
         private void OnForegroundChanged(

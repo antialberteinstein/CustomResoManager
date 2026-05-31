@@ -63,7 +63,8 @@ public partial class App : Application
                 .WithHttpTransport()
                 .WithTools<ResolutionTools>()
                 .WithTools<ProfileTools>()
-                .WithTools<EngineTools>();
+                .WithTools<EngineTools>()
+                .WithTools<ProcessTools>();
 
             _mcpHost = builder.Build();
             _mcpHost.Services.GetRequiredService<ServerState>();

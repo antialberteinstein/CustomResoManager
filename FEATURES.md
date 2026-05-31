@@ -125,6 +125,16 @@ Panel riêng bên phải, chiếm toàn bộ chiều cao app.
 | `stop_engine` | — | `{running, activeProfile, error}` | Tắt engine và trả màn hình về độ phân giải gốc. |
 | `get_engine_status` | — | `{running, activeProfile, error}` | Xem engine đang chạy hay không và profile đang áp. |
 
+**Nhóm khám phá tiến trình / app** (để agent tra `processName` rồi tạo profile):
+
+| Tool | Tham số | Kết quả | Ý nghĩa |
+|---|---|---|---|
+| `list_running_processes` | — | `[{processName,title}]` | Liệt kê tiến trình đang chạy có cửa sổ thật. |
+| `list_installed_apps` | — | `[{name,processName}]` | Liệt kê app đã cài (quét shortcut Start Menu, resolve về `.exe`). |
+
+> Khi agent gọi tool làm đổi trạng thái (đổi độ phân giải, thêm/sửa/xoá profile, bật/tắt engine),
+> giao diện WPF **tự cập nhật** nhờ các event `ResolutionChanged` / `ProfilesChanged` / `Started` / `Stopped`.
+
 > Engine start/stop chỉ thật sự nhận sự kiện focus khi chạy **in-process trong app WPF** (cần message pump trên UI thread) — server đẩy lời gọi lên UI dispatcher. Bản `CustomResoManager.McpServer` độc lập (console) vẫn expose các tool này nhưng engine không nhận được WinEvent (dùng cho dev/test).
 
 **Ví dụ kết quả `change_resolution`:**

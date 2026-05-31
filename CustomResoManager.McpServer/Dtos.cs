@@ -64,3 +64,13 @@ public sealed record EngineStatusDto(
     [property: JsonPropertyName("running")] bool Running,
     [property: JsonPropertyName("activeProfile")] ProfileDto? ActiveProfile,
     [property: JsonPropertyName("error")] string? Error);
+
+/// <summary>A running process with a real window: {"processName", "title"}.</summary>
+public sealed record RunningProcessDto(
+    [property: JsonPropertyName("processName")] string ProcessName,
+    [property: JsonPropertyName("title")] string Title);
+
+/// <summary>An installed app from a Start Menu shortcut: {"name", "processName"}.</summary>
+public sealed record InstalledAppDto(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("processName")] string ProcessName);

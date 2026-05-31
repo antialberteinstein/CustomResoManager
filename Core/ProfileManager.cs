@@ -15,12 +15,18 @@ namespace CustomResoManager.Core
         bool RemoveProfile(string processName);
         void SaveChanges();
         void LoadProfiles();
+
+        /// <summary>Raised after the profile list is persisted (add/update/remove), so the UI can refresh
+        /// even when the change came from the MCP/agent rather than the user.</summary>
+        event EventHandler? ProfilesChanged;
     }
 
     public class ProfileManager : IProfileManager
     {
         private readonly string _profilesFilePath;
         private List<GameProfile> _profiles;
+
+        public event EventHandler? ProfilesChanged;
 
         public ProfileManager(string filePath = "profiles.json")
         {
@@ -101,6 +107,9 @@ namespace CustomResoManager.Core
             {
                 throw new Exception($"Failed to save profiles to {_profilesFilePath}: {ex.Message}", ex);
             }
+
+            // Báo cho UI biết danh sách đã đổi (kể cả khi do agent/MCP thực hiện).
+            ProfilesChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>

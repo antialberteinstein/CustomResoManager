@@ -13,11 +13,17 @@ namespace CustomResoManager.Core
         bool ChangeResolution(int width, int height);
         bool ChangeResolution(int width, int height, int? refreshRate);
         void RestoreNativeResolution();
+
+        /// <summary>Raised after the display mode is successfully changed, so the UI can refresh its
+        /// current-resolution readout even when the change came from the MCP/agent or the engine.</summary>
+        event EventHandler? ResolutionChanged;
     }
 
     public class ResolutionManager : IResolutionManager
     {
         private ResolutionModel? _nativeResolution;
+
+        public event EventHandler? ResolutionChanged;
 
         public ResolutionManager()
         {
@@ -132,6 +138,7 @@ namespace CustomResoManager.Core
 
                 if (result == NativeMethods.DISP_CHANGE_SUCCESSFUL)
                 {
+                    ResolutionChanged?.Invoke(this, EventArgs.Empty);
                     return true;
                 }
                 else

@@ -79,6 +79,12 @@ public partial class MainWindow : Window
         _appEngine.ProfileDeactivated += OnProfileDeactivated;
         _appEngine.EngineError += OnEngineError;
 
+        // Tự cập nhật giao diện khi trạng thái đổi do AGENT/MCP điều khiển (không qua nút bấm).
+        _appEngine.Started += OnEngineStartedExternally;
+        _appEngine.Stopped += OnEngineStoppedExternally;
+        _profileManager.ProfilesChanged += OnProfilesChangedExternally;
+        _resolutionManager.ResolutionChanged += OnResolutionChangedExternally;
+
         // LoadResolutionOptions phải chạy trước RefreshProfileList để ComboBox trong
         // DataGrid có sẵn nguồn dữ liệu (ResolutionOptions) khi các dòng được dựng.
         LoadResolutionOptions();
@@ -226,6 +232,36 @@ public partial class MainWindow : Window
             RefreshCurrentResolution();
         });
     }
+
+    // ── Đồng bộ giao diện khi agent/MCP thay đổi trạng thái ────────────────────
+    // Các sự kiện này có thể bắn từ luồng Kestrel (MCP) hoặc luồng nền của engine,
+    // nên luôn marshal về UI thread bằng Dispatcher trước khi đụng tới control.
+
+    private void OnEngineStartedExternally(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _lastEngineError = null;
+            SetEngineStatus(true, "");
+            RefreshCurrentResolution();
+        });
+    }
+
+    private void OnEngineStoppedExternally(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            SetEngineStatus(false, "");
+            activeProfileBanner.Visibility = Visibility.Collapsed;
+            RefreshCurrentResolution();
+        });
+    }
+
+    private void OnProfilesChangedExternally(object? sender, EventArgs e)
+        => Dispatcher.BeginInvoke(RefreshProfileList);
+
+    private void OnResolutionChangedExternally(object? sender, EventArgs e)
+        => Dispatcher.BeginInvoke(RefreshCurrentResolution);
 
     private string? _lastEngineError;
 

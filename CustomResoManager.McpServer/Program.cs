@@ -26,7 +26,8 @@ builder.Services
     .WithHttpTransport()
     .WithTools<ResolutionTools>()
     .WithTools<ProfileTools>()
-    .WithTools<EngineTools>();
+    .WithTools<EngineTools>()
+    .WithTools<ProcessTools>();
 
 var app = builder.Build();
 
