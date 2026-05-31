@@ -18,6 +18,13 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="*-*" />
+    <!-- YAML parsing for config.yaml (server bind address). -->
+    <PackageReference Include="YamlDotNet" Version="16.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship config.yaml next to the exe so ServerConfig.Load() finds it. -->
+    <None Update="config.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

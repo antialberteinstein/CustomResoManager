@@ -8,3 +8,4 @@ chromadb>=0.5.3
 sentence-transformers>=2.7.0
 pypdf>=4.2.0
 mcp>=1.2.0
+PyYAML>=6.0

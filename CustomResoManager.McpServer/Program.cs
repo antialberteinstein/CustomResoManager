@@ -6,8 +6,10 @@ using CustomResoManager.McpServer;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Match the mock's host/port exactly so the agent needs no config change.
-builder.WebHost.UseUrls("http://127.0.0.1:7777");
+// Bind address comes from config.yaml (next to the exe); defaults to 127.0.0.1:7777.
+// Set host: 0.0.0.0 or auto in config.yaml to serve the agent over the LAN.
+var serverConfig = AppConfig.Load(AppContext.BaseDirectory).McpServer;
+builder.WebHost.UseUrls(serverConfig.BindUrl);
 
 // Win32-backed resolution manager + server-side revert state, both singletons.
 builder.Services.AddSingleton<IResolutionManager, ResolutionManager>();
@@ -31,9 +33,9 @@ var app = builder.Build();
 // Eagerly capture the native resolution at startup (before any change happens).
 app.Services.GetRequiredService<ServerState>();
 
-// Streamable-HTTP MCP endpoint at /mcp (agent URL is http://127.0.0.1:7777/mcp/).
-app.MapMcp("/mcp");
+// Streamable-HTTP MCP endpoint at the configured path (default /mcp).
+app.MapMcp(serverConfig.McpPath);
 
-app.Logger.LogInformation("[mcp-csharp] starting on http://127.0.0.1:7777/mcp/");
+app.Logger.LogInformation("[mcp-csharp] starting, clients connect to {Url}", serverConfig.DisplayUrl);
 
 app.Run();

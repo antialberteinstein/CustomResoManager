@@ -1,0 +1,21 @@
+# Config for the C# module (the WPF "Custom Resolution Manager" app).
+# Read at startup by AppConfig.Load(); edit then restart the app — no rebuild needed.
+# Missing/invalid file falls back to localhost defaults.
+#
+# This app plays two network roles, so there are two sections:
+#   - mcpServer: the tool server THIS app HOSTS (the Python agent connects here).
+#   - agent:     the chat backend this app CALLS (POST /chat, GET /health).
+
+# mcpServer — where this app exposes its MCP tools.
+#   host: 127.0.0.1  local only | 0.0.0.0  all NICs | auto  bind all + advertise LAN IPv4 | <IP>
+mcpServer:
+  host: auto
+  port: 7777
+  path: /mcp
+
+# agent — where the Python AI chat agent runs.
+#   Set host to the agent machine's LAN IP if it runs on a different computer,
+#   e.g. host: 192.168.1.50 ; otherwise 127.0.0.1 for same-machine.
+agent:
+  host: mac
+  port: 8000

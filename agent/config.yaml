@@ -1,0 +1,21 @@
+# Config for the Python agent module.
+# Read at startup by config.py; edit then restart the agent.
+# Missing/invalid file falls back to localhost defaults.
+#
+# This agent plays two network roles, so there are two sections:
+#   - chat:      the chat API THIS agent HOSTS (the C# WPF app posts here).
+#   - mcpServer: the C# tool server this agent CALLS to perform actions.
+
+# chat — where this agent listens for chat requests from the WPF app.
+#   host: 0.0.0.0  reachable from the LAN | 127.0.0.1  local only
+chat:
+  host: 0.0.0.0
+  port: 8000
+
+# mcpServer — the C# app's MCP tool server.
+#   Set host to the C# machine's LAN IP if it runs on a different computer,
+#   e.g. host: 192.168.1.50 ; otherwise 127.0.0.1 for same-machine.
+mcpServer:
+  host: 10.211.55.3
+  port: 7777
+  path: /mcp

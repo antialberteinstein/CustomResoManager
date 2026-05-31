@@ -12,6 +12,13 @@
   <ItemGroup>
     <!-- Official C# MCP SDK: ModelContextProtocol.AspNetCore (ASP.NET Core + Streamable HTTP) -->
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="*-*" />
+    <!-- YAML parsing for config.yaml (server bind address). -->
+    <PackageReference Include="YamlDotNet" Version="16.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship config.yaml next to the exe so ServerConfig.Load() finds it. -->
+    <None Include="..\config.yaml" Link="config.yaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

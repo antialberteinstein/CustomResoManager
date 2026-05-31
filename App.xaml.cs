@@ -14,11 +14,17 @@ public partial class App : Application
     public static IProfileManager ProfileManager { get; private set; } = null!;
     public static IAppEngine AppEngine { get; private set; } = null!;
 
+    /// <summary>App-wide config (MCP server bind + agent chat endpoint) from config.yaml.</summary>
+    public static AppConfig Config { get; private set; } = new();
+
     private WebApplication? _mcpHost;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Load config first so MainWindow (created via StartupUri after this returns) can read it.
+        Config = AppConfig.Load(AppContext.BaseDirectory);
 
         ResolutionManager = new ResolutionManager();
         ProfileManager = new ProfileManager();
@@ -31,8 +37,12 @@ public partial class App : Application
     {
         try
         {
+            // MCP bind address from config.yaml (mcpServer section); defaults to 127.0.0.1:7777.
+            // Set host: 0.0.0.0 or auto to expose the MCP server to agents on the LAN.
+            var cfg = Config.McpServer;
+
             var builder = WebApplication.CreateBuilder();
-            builder.WebHost.UseUrls("http://127.0.0.1:7777");
+            builder.WebHost.UseUrls(cfg.BindUrl);
 
             builder.Services.AddSingleton<IResolutionManager>(_ => ResolutionManager);
             builder.Services.AddSingleton<IProfileManager>(_ => ProfileManager);
@@ -57,7 +67,8 @@ public partial class App : Application
 
             _mcpHost = builder.Build();
             _mcpHost.Services.GetRequiredService<ServerState>();
-            _mcpHost.MapMcp("/mcp");
+            _mcpHost.MapMcp(cfg.McpPath);
+            System.Diagnostics.Debug.WriteLine($"[MCP Server] listening, clients connect to {cfg.DisplayUrl}");
 
             // StartAsync (thay vì RunAsync) để không gắn console lifetime và trả về
             // ngay sau khi khởi động — vòng đời do OnExit kiểm soát.

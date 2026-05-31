@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CustomResoManager.Core;
+using CustomResoManager.McpServer;
 using CustomResoManager.Models;
 
 namespace CustomResoManager;
@@ -21,7 +22,11 @@ public partial class MainWindow : Window
     private readonly IAppEngine _appEngine;
     private readonly HttpClient _chatClient = new() { Timeout = TimeSpan.FromMinutes(5) };
     private List<ResolutionModel> _cachedResolutions = [];
-    private const string ChatEndpoint = "http://127.0.0.1:8000/chat";
+
+    // Agent chat endpoint comes from config.yaml (agent section); set its host to the
+    // agent machine's LAN IP when the Python backend runs on a different computer.
+    private static readonly AgentConfig AgentCfg = App.Config.Agent;
+    private static readonly string ChatEndpoint = AgentCfg.ChatUrl;
 
     // ── Display model for DataGrid ────────────────────────────────────────────
 
@@ -167,7 +172,7 @@ public partial class MainWindow : Window
         try
         {
             using var ping = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            var resp = await ping.GetAsync("http://127.0.0.1:8000/health");
+            var resp = await ping.GetAsync(AgentCfg.HealthUrl);
             SetChatStatus(resp.IsSuccessStatusCode);
         }
         catch
@@ -182,7 +187,7 @@ public partial class MainWindow : Window
             ? new SolidColorBrush(Color.FromRgb(46, 125, 50))
             : new SolidColorBrush(Color.FromRgb(158, 158, 158));
         txtChatStatus.Text = connected
-            ? "Connected — http://127.0.0.1:8000"
+            ? $"Connected — {AgentCfg.BaseUrl}"
             : "Disconnected — start the Python agent";
         txtChatStatus.Foreground = connected
             ? new SolidColorBrush(Color.FromRgb(46, 125, 50))
