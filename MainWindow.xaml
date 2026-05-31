@@ -141,6 +141,7 @@
                         <!-- Inputs -->
                         <TextBox x:Name="txtProcessName" Grid.Row="2"
                                  AllowDrop="True"
+                                 PreviewDragEnter="txtProcessName_DragOver"
                                  PreviewDragOver="txtProcessName_DragOver"
                                  PreviewDrop="txtProcessName_Drop"
                                  ToolTip="Drag an .exe file here to auto-fill"/>
