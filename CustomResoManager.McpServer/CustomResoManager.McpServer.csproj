@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <!-- Official C# MCP SDK: ModelContextProtocol.AspNetCore (ASP.NET Core + Streamable HTTP) -->
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.3" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="*-*" />
   </ItemGroup>
 
   <ItemGroup>
